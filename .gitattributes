@@ -1,0 +1,57 @@
+# Quebras de linha: LF em todo lugar, inclusive na copia de trabalho.
+#
+# Sem isto, o `core.autocrlf` de cada maquina decide sozinho, e o mesmo arquivo
+# passa a ter quebras diferentes conforme quem fez o checkout — o `git diff`
+# acusa alteracao em arquivo que ninguem tocou. Como a Rugine e para rodar em
+# Windows e Linux, isso deixaria de ser teoria no primeiro clone.
+* text=auto eol=lf
+
+# Fontes e dados textuais. Redundante com a linha acima, mas explicito:
+# um arquivo novo com conteudo incomum nao fica a merce da heuristica.
+*.rs    text eol=lf
+*.toml  text eol=lf
+*.lock  text eol=lf
+*.wgsl  text eol=lf
+*.glsl  text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.ron   text eol=lf
+
+# Scripts cuja quebra de linha e funcional, nao estetica: o shell do Unix
+# engasga com CRLF, e o interpretador de lote do Windows espera CRLF.
+*.sh   text eol=lf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binarios: nunca converter, nunca tentar diff de texto. Converter quebras
+# dentro de uma textura ou de um .glb corrompe o arquivo em silencio.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.tga   binary
+*.bmp   binary
+*.dds   binary
+*.ktx2  binary
+*.hdr   binary
+*.exr   binary
+*.glb   binary
+*.fbx   binary
+*.blend binary
+*.bin   binary
+*.ttf   binary
+*.otf   binary
+*.woff  binary
+*.woff2 binary
+*.wav   binary
+*.ogg   binary
+*.mp3   binary
+*.flac  binary
+
+# .gltf e JSON, nao binario — ao contrario do .glb, que e o mesmo formato
+# empacotado. Tratar os dois igual perderia o diff legivel do primeiro.
+*.gltf text eol=lf
+*.obj  text eol=lf
+*.mtl  text eol=lf
