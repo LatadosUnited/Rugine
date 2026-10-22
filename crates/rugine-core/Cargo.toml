@@ -1,0 +1,10 @@
+[package]
+name = "rugine-core"
+description = "Tipos e utilitarios compartilhados por toda a Rugine."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+glam.workspace = true
+log.workspace = true

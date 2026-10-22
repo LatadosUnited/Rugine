@@ -1,0 +1,18 @@
+[package]
+name = "rugine-render"
+description = "Camada de renderizacao da Rugine, sobre wgpu."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rugine-core.workspace = true
+wgpu.workspace = true
+bytemuck.workspace = true
+log.workspace = true
+thiserror.workspace = true
+
+# Este crate NAO depende de winit. A ponte com a janela e feita pelos traits
+# de raw-window-handle, que e o denominador comum entre winit, SDL, e um
+# canvas de browser. Trocar o backend de janela nao toca aqui.
+raw-window-handle.workspace = true

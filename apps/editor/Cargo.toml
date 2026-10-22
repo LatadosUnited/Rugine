@@ -1,0 +1,16 @@
+[package]
+name = "editor"
+description = "Editor da Rugine."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+rugine-app.workspace = true
+rugine-scene.workspace = true
+env_logger.workspace = true
+anyhow.workspace = true
+rugine-core.workspace = true
+log.workspace = true
+egui_dock.workspace = true
