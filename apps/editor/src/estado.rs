@@ -13,9 +13,8 @@ use crate::docking::{Aba, layout_padrao};
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum Ferramenta {
     Selecionar,
-    /// Padrao: e a ferramenta com gizmo, entao o editor abre mostrando as
-    /// alcas assim que algo e selecionado, em vez de exigir descobrir o
-    /// atalho antes de qualquer manipulacao.
+    /// Padrao: e a ferramenta mais usada, e com o gizmo visivel desde a
+    /// abertura o editor nao exige descobrir um atalho antes de manipular.
     #[default]
     Mover,
     Rotacionar,
@@ -279,6 +278,10 @@ fn cena_exemplo() -> Scene {
         Vec3::new(0.0, -0.2, 0.6),
         Vec3::new(0.8, 0.15, 0.2),
     );
+
+    // Comeca com algo selecionado: o editor abre ja mostrando o gizmo, em
+    // vez de exigir um clique para descobrir que ele existe.
+    cena.select(Some(jogador));
 
     cena
 }

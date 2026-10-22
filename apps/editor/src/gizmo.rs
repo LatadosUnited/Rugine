@@ -85,8 +85,15 @@ impl Gizmo {
     /// em objetos proximos — em ambos os casos, impossivel de agarrar.
     const FRACAO_DA_TELA: f32 = 0.13;
 
-    /// Espessura da alca, como fracao do comprimento.
+    /// Espessura da haste, como fracao do comprimento.
     const ESPESSURA: f32 = 0.055;
+
+    /// Espessura do anel, como fracao do comprimento.
+    ///
+    /// Mais grosso que a haste: a haste e uma barra longa e chama atencao
+    /// pelo comprimento, enquanto o anel so tem a espessura para se fazer
+    /// notar.
+    const ESPESSURA_ANEL: f32 = 0.085;
 
     /// Quantos segmentos formam cada anel.
     ///
@@ -128,7 +135,9 @@ impl Gizmo {
 
     /// Raio dos aneis de rotacao.
     pub fn raio_anel(&self) -> f32 {
-        self.comprimento * 0.9
+        // Maior que a haste do gizmo de mover: o anel precisa sobrar para
+        // fora da silhueta do objeto para ser agarravel.
+        self.comprimento * 1.05
     }
 
     /// Se esta ferramenta desenha alcas.
@@ -239,7 +248,7 @@ impl Gizmo {
     /// dinamico so para o gizmo, e nao ficaria mais legivel.
     fn instancias_aneis(&self) -> Vec<Instancia> {
         let mut saida = Vec::with_capacity(Eixo::TODOS.len() * Self::SEGMENTOS + 1);
-        let espessura = self.comprimento * Self::ESPESSURA;
+        let espessura = self.comprimento * Self::ESPESSURA_ANEL;
 
         for eixo in Eixo::TODOS {
             let cor = if self.destacado == Some(eixo) {
@@ -249,13 +258,26 @@ impl Gizmo {
             };
 
             for passo in 0..Self::SEGMENTOS {
-                let angulo = passo as f32 / Self::SEGMENTOS as f32 * std::f32::consts::TAU;
+                let a = passo as f32 / Self::SEGMENTOS as f32 * std::f32::consts::TAU;
+                let b = (passo + 1) as f32 / Self::SEGMENTOS as f32 * std::f32::consts::TAU;
+
+                let inicio = self.ponto_do_anel(eixo, a);
+                let corda = self.ponto_do_anel(eixo, b) - inicio;
+
+                let comprimento_segmento = corda.length();
+                if comprimento_segmento < 1e-6 {
+                    continue;
+                }
 
                 saida.push(Instancia::new(
                     Mat4::from_scale_rotation_translation(
-                        Vec3::splat(espessura),
-                        Quat::IDENTITY,
-                        self.ponto_do_anel(eixo, angulo),
+                        // Um pouco mais longa que a corda, para os cantos se
+                        // encostarem em vez de deixar vao entre segmentos.
+                        Vec3::new(comprimento_segmento * 1.08, espessura, espessura),
+                        // O cubo nasce esticado em X; girar X ate a tangente
+                        // encaixa a barra no anel.
+                        Quat::from_rotation_arc(Vec3::X, corda / comprimento_segmento),
+                        inicio + corda * 0.5,
                     ),
                     cor,
                 ));
@@ -456,5 +478,18 @@ mod tests {
         assert!(Gizmo::usa_aneis(Ferramenta::Rotacionar));
         assert!(!Gizmo::usa_aneis(Ferramenta::Mover));
         assert!(!Gizmo::usa_aneis(Ferramenta::Escalar));
+    }
+
+    /// O gizmo de rotacao tem que produzir instancias de verdade: 28 por
+    /// anel, tres aneis, mais o centro.
+    #[test]
+    fn rotacao_gera_instancias() {
+        let instancias = gizmo_rotacao(Quat::IDENTITY).instancias();
+        assert_eq!(instancias.len(), Gizmo::SEGMENTOS * 3 + 1);
+    }
+
+    #[test]
+    fn mover_gera_instancias() {
+        assert_eq!(gizmo().instancias().len(), 7);
     }
 }
