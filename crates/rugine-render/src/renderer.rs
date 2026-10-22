@@ -386,10 +386,15 @@ impl Renderer {
     pub fn enviar_cena(&mut self, cena: &CenaGpu) {
         self.camera.atualizar(&self.queue, cena.view_proj);
 
-        if cena.instancias.len() > self.capacidade_instancias {
+        // Os dois conjuntos vivem no mesmo buffer, um apos o outro: o que
+        // separa o desenho deles e o intervalo de instancias do draw, nao um
+        // segundo buffer.
+        let total = cena.instancias.len() + cena.sobrepostas.len();
+
+        if total > self.capacidade_instancias {
             // Cresce em dobro em vez de ajustar exato: redimensionar a cada
             // entidade criada faria uma realocacao por clique no editor.
-            let nova = (cena.instancias.len() * 2).max(self.capacidade_instancias * 2);
+            let nova = (total * 2).max(self.capacidade_instancias * 2);
             self.instancias = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("rugine::instancias"),
                 size: (nova * size_of::<Instancia>()) as wgpu::BufferAddress,
@@ -406,15 +411,18 @@ impl Renderer {
         }
 
         log::debug!(
-            "cena: {} instancias, grade={}",
+            "cena: {} instancias, {} sobrepostas, grade={}",
             cena.instancias.len(),
+            cena.sobrepostas.len(),
             cena.grade
         );
 
         // 12 triangulos por cubo; a grade e linha e nao conta como triangulo.
         self.stats = RenderStats {
-            draw_calls: u32::from(cena.grade) + u32::from(!cena.instancias.is_empty()),
-            triangles: (cena.instancias.len() * 12) as u32,
+            draw_calls: u32::from(cena.grade)
+                + u32::from(!cena.instancias.is_empty())
+                + u32::from(!cena.sobrepostas.is_empty()),
+            triangles: (total * 12) as u32,
         };
     }
 
@@ -468,6 +476,22 @@ impl Renderer {
             );
             // Um draw para todas as entidades.
             pass.draw_indexed(0..self.cubo.indices(), 0, 0..cena.instancias.len() as u32);
+        }
+
+        // Por ultimo e com o pipeline que ignora profundidade: o gizmo
+        // precisa ficar agarravel mesmo dentro da geometria.
+        if !cena.sobrepostas.is_empty() {
+            let inicio = cena.instancias.len() as u32;
+            let fim = inicio + cena.sobrepostas.len() as u32;
+
+            pass.set_pipeline(&self.pipelines.sobreposto);
+            pass.set_vertex_buffer(0, self.cubo.vertices().slice(..));
+            pass.set_vertex_buffer(1, self.instancias.slice(..));
+            pass.set_index_buffer(
+                self.cubo.buffer_indices().slice(..),
+                wgpu::IndexFormat::Uint16,
+            );
+            pass.draw_indexed(0..self.cubo.indices(), 0, inicio..fim);
         }
     }
 

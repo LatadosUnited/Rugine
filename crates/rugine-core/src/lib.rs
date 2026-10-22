@@ -4,6 +4,7 @@
 //! precisar de GPU, janela ou assets, esta na camada errada.
 
 pub mod math;
+pub mod raio;
 pub mod time;
 
 pub mod prelude {
@@ -12,5 +13,6 @@ pub mod prelude {
     // projeto a declarar `rugine-core` so para alcanca-lo.
     pub use crate::math::camera;
     pub use crate::math::{Mat4, Quat, Vec2, Vec3, Vec4};
+    pub use crate::raio::Raio;
     pub use crate::time::Time;
 }

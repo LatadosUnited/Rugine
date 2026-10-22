@@ -3,6 +3,7 @@
 use egui_dock::DockState;
 
 use crate::camera::CameraEditor;
+use crate::gizmo::Eixo;
 use rugine_app::prelude::Vec3;
 use rugine_scene::{EntityId, Scene};
 
@@ -11,8 +12,11 @@ use crate::docking::{Aba, layout_padrao};
 /// Ferramenta de manipulacao ativa na barra do viewport.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum Ferramenta {
-    #[default]
     Selecionar,
+    /// Padrao: e a ferramenta com gizmo, entao o editor abre mostrando as
+    /// alcas assim que algo e selecionado, em vez de exigir descobrir o
+    /// atalho antes de qualquer manipulacao.
+    #[default]
     Mover,
     Rotacionar,
     Escalar,
@@ -131,6 +135,12 @@ pub struct Editor {
     /// Camera do viewport.
     pub camera: CameraEditor,
 
+    /// Alca do gizmo sob o mouse, para destaque.
+    pub alca_sob_mouse: Option<Eixo>,
+
+    /// Arrasto de alca em andamento.
+    pub arrasto: Option<Arrasto>,
+
     /// Se o modo de voo (botao direito segurado) esta ativo.
     ///
     /// Guardado entre frames porque o gesto comeca e termina em frames
@@ -167,11 +177,26 @@ impl Default for Editor {
                 "Sobrevivencia.cpp".to_owned(),
             ],
             camera: CameraEditor::default(),
+            alca_sob_mouse: None,
+            arrasto: None,
             voando: false,
             viewport_px: [0, 0],
             barra_propria: false,
         }
     }
+}
+
+/// Um arrasto de alca em andamento.
+///
+/// Guarda o estado do inicio do gesto, nao o do quadro anterior: aplicar
+/// sempre o deslocamento total em relacao ao agarre evita o acumulo de
+/// arredondamento que faria o objeto escorregar durante o arrasto.
+pub struct Arrasto {
+    pub eixo: Eixo,
+    /// Posicao ao longo do eixo onde o arrasto comecou.
+    pub agarre: f32,
+    pub translacao_inicial: Vec3,
+    pub escala_inicial: Vec3,
 }
 
 /// Cena inicial, para o editor nao abrir vazio.

@@ -7,7 +7,9 @@
 mod camera;
 mod docking;
 mod estado;
+mod gizmo;
 mod paineis;
+mod picking;
 mod widgets;
 
 use rugine_app::prelude::*;
@@ -50,11 +52,19 @@ impl App for Editor {
             instancias.push(Instancia::new(self.cena.world_matrix(id), cor));
         }
 
+        // O gizmo e reconstruido todo frame a partir da selecao e da
+        // camera: ele escala com a distancia, entao guardar seria guardar
+        // algo que vence no frame seguinte.
+        let sobrepostas = paineis::interacao::gizmo_atual(self)
+            .map(|gizmo| gizmo.instancias())
+            .unwrap_or_default();
+
         let proporcao = ctx.renderer.viewport().aspect_ratio();
         ctx.definir_cena(CenaGpu {
             view_proj: self.camera.view_proj(proporcao),
             instancias,
             grade: self.grade,
+            sobrepostas,
         });
 
         // A "compilacao" e simulada: ela existe para que o estado da barra de

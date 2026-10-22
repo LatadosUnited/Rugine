@@ -15,6 +15,11 @@ pub struct CenaGpu {
     pub instancias: Vec<Instancia>,
     /// Se a grade do chao aparece.
     pub grade: bool,
+    /// Instancias desenhadas por cima de tudo, sem teste de profundidade.
+    ///
+    /// Separadas das demais porque o que as distingue e o pipeline, nao o
+    /// conteudo: sao os mesmos cubos, com outra regra de profundidade.
+    pub sobrepostas: Vec<Instancia>,
 }
 
 impl Default for CenaGpu {
@@ -23,6 +28,7 @@ impl Default for CenaGpu {
             view_proj: Mat4::IDENTITY,
             instancias: Vec::new(),
             grade: true,
+            sobrepostas: Vec::new(),
         }
     }
 }

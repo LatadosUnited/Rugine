@@ -8,6 +8,7 @@ pub mod bordas;
 pub mod cena;
 pub mod hierarquia;
 pub mod inspector;
+pub mod interacao;
 pub mod menu;
 pub mod projeto;
 pub mod viewport;

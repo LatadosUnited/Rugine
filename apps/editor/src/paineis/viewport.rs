@@ -25,6 +25,12 @@ pub fn desenhar(ui: &mut egui::Ui, editor: &mut Editor, ctx: &mut Context<'_>) {
 
     navegar(ui, editor, &resposta, ctx.time.delta());
 
+    // Depois da navegacao: enquanto o botao direito pilota a camera, o
+    // esquerdo nao deve selecionar nem arrastar alca.
+    if !editor.voando {
+        super::interacao::tratar(editor, &resposta, rect, escala);
+    }
+
     ui.painter().image(
         ctx.viewport_texture,
         rect,

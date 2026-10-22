@@ -10,6 +10,8 @@ use crate::mesh::{Instancia, Vertex, VertexLinha};
 pub struct Pipelines {
     pub malha: wgpu::RenderPipeline,
     pub grade: wgpu::RenderPipeline,
+    /// Igual ao de malha, mas sempre visivel.
+    pub sobreposto: wgpu::RenderPipeline,
 }
 
 impl Pipelines {
@@ -102,6 +104,48 @@ impl Pipelines {
             cache: None,
         });
 
-        Self { malha, grade }
+        // O gizmo tem que ser agarravel mesmo quando esta dentro ou atras
+        // de um objeto: uma alca escondida pela geometria e uma alca que nao
+        // da para clicar. Por isso o teste de profundidade passa sempre e
+        // nada e escrito no depth.
+        let sobreposto = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("rugine::pipeline_sobreposto"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader_malha,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &[Some(Vertex::LAYOUT), Some(Instancia::LAYOUT)],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader_malha,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: formato,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::Always),
+                ..DepthBuffer::state()
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+
+        Self {
+            malha,
+            grade,
+            sobreposto,
+        }
     }
 }

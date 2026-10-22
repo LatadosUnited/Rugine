@@ -69,6 +69,8 @@ impl App for Sandbox {
             view_proj: proj * view,
             instancias,
             grade: true,
+            // O sandbox nao tem gizmo: nada para desenhar por cima.
+            sobrepostas: Vec::new(),
         });
 
         if let Some(limite) = self.exit_after

@@ -56,9 +56,12 @@ Segue o esquema do Unity:
 | Botão do meio | Deslocar |
 | Roda | Aproximar |
 | `F` | Enquadrar a seleção |
+| Botão esquerdo | Selecionar o objeto sob o cursor |
+| Esquerdo sobre uma alça | Arrastar para mover ou escalar no eixo |
 | `Q`/`W`/`E`/`R` | Trocar de ferramenta (fora do modo de voo) |
 
-O botão esquerdo sozinho fica livre de propósito: é o que o picking vai usar.
+Com `Snap` ligado na barra do viewport, o arrasto da alça anda em degraus do
+tamanho configurado.
 
 ## Checar o Linux sem CI
 
@@ -173,8 +176,8 @@ Versão recente e com mudanças grandes; quem for mexer na UI vai esbarrar nelas
 Os painéis existem e editam estado real, mas vários botões são forma sem função,
 e isso está dito na própria interface. O que falta, em ordem de dependência:
 
-1. **Picking e gizmos** — clicar numa entidade no viewport e arrastar para
-   mover. A câmera já existe, então falta o raycast e as alças.
+1. **Gizmo de rotação** — mover e escalar existem; girar precisa de
+   interseção com anéis, que é outra conta.
 2. **Teste de pixel headless** — o `RenderTarget` já tem `COPY_SRC`, então ler
    de volta e verificar é barato. Exige GPU, então não roda nos runners do CI.
 3. **Malhas de verdade** — glTF em vez de um cubo para tudo. Dá conteúdo à aba
