@@ -88,6 +88,38 @@ pub fn run<A: App>(config: EngineConfig, app: A) -> Result<()> {
     Ok(())
 }
 
+/// Ajustes de janela que so existem numa plataforma.
+///
+/// Duas funcoes com `cfg`, e nao um `cfg` em volta de um bloco no meio do
+/// codigo: dentro de uma funcao, o bloco some no Linux e deixa para tras o
+/// `mut` de que ele era o unico usuario — e `unused_mut` vira erro sob
+/// `-D warnings`. Foi assim que a primeira execucao do CI quebrou, num aviso
+/// que nao aparece no Windows.
+#[cfg(target_os = "windows")]
+fn extras_de_plataforma(
+    attributes: winit::window::WindowAttributes,
+    decoracao: Decoracao,
+) -> winit::window::WindowAttributes {
+    use winit::platform::windows::WindowAttributesExtWindows as _;
+
+    if decoracao == Decoracao::Propria {
+        // Sem a decoracao do sistema, o Windows tira tambem a sombra e a borda
+        // da janela, e ela fica um retangulo chapado colado no fundo. Isto
+        // devolve as duas coisas sem devolver a barra de titulo.
+        attributes.with_undecorated_shadow(true)
+    } else {
+        attributes
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn extras_de_plataforma(
+    attributes: winit::window::WindowAttributes,
+    _decoracao: Decoracao,
+) -> winit::window::WindowAttributes {
+    attributes
+}
+
 /// Estado que so existe depois que a plataforma nos deu uma janela.
 ///
 /// Em Android a aplicacao pode ser suspensa e retomada, destruindo e
@@ -236,23 +268,12 @@ impl<A: App> ApplicationHandler for Runner<A> {
             return;
         }
 
-        let mut attributes = Window::default_attributes()
+        let attributes = Window::default_attributes()
             .with_title(&self.config.title)
             .with_inner_size(PhysicalSize::new(self.config.width, self.config.height))
             .with_decorations(self.config.decoracao == Decoracao::Sistema);
 
-        // Sem a decoracao do sistema, o Windows tambem tira a sombra e a borda
-        // da janela, e ela fica um retangulo chapado colado no fundo. Isto
-        // devolve as duas coisas sem devolver a barra de titulo.
-        #[cfg(target_os = "windows")]
-        if self.config.decoracao == Decoracao::Propria {
-            use winit::platform::windows::WindowAttributesExtWindows as _;
-            attributes = attributes.with_undecorated_shadow(true);
-        }
-
-        // `mut` so e usado no bloco acima; fora do Windows o compilador
-        // reclamaria da variavel mutavel sem necessidade.
-        let attributes = attributes;
+        let attributes = extras_de_plataforma(attributes, self.config.decoracao);
 
         let window = match event_loop.create_window(attributes) {
             Ok(window) => Arc::new(window),

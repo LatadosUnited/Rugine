@@ -26,6 +26,25 @@ cargo run -p sandbox
 | `WGPU_BACKEND=vulkan\|dx12\|gl` | Força o backend, sobrepondo o padrão |
 | `RUGINE_EXIT_AFTER=3` | Sandbox encerra após N segundos (smoke test / CI) |
 
+## Checar o Linux sem CI
+
+`clippy` e `check` não linkam, então dá para validar o alvo Linux de dentro do
+Windows, sem toolchain cruzada e sem esperar o GitHub:
+
+```bash
+rustup target add x86_64-unknown-linux-gnu
+cargo clippy --workspace --all-targets --target x86_64-unknown-linux-gnu -- -D warnings
+```
+
+Vale a pena: o primeiro erro que isso pega foi um `mut` usado só dentro de um
+bloco `#[cfg(target_os = "windows")]`. No Linux o bloco some, o `mut` fica sem
+uso e `-D warnings` o transforma em erro — algo que não aparece compilando no
+Windows.
+
+O CI no GitHub Actions faz o mesmo nas duas plataformas, mas só em pull request
+ou acionado à mão: compilar wgpu, naga e egui duas vezes custa minutos demais
+para rodar a cada commit.
+
 ## Arquitetura
 
 ```

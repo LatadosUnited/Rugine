@@ -1,10 +1,17 @@
 name: CI
 
+# Nao roda a cada push de proposito: a primeira execucao mostrou que compilar
+# wgpu, naga e egui em duas plataformas custa minutos demais para valer em todo
+# commit. O caminho barato para checar o Linux e local, sem CI nenhum:
+#
+#     rustup target add x86_64-unknown-linux-gnu
+#     cargo clippy --workspace --all-targets --target x86_64-unknown-linux-gnu -- -D warnings
+#
+# `clippy` e `check` nao linkam, entao isso roda no Windows sem toolchain
+# cruzada. O CI fica para antes de integrar algo e para quando se quiser a
+# confirmacao de verdade.
 on:
-  push:
-    branches: [master]
   pull_request:
-  # Permite disparar a mao pela aba Actions, util para revalidar sem commit.
   workflow_dispatch:
 
 env:
@@ -17,8 +24,7 @@ jobs:
 
     strategy:
       # Sem fail-fast de proposito: o Windows passando nao diz nada sobre o
-      # Linux, e e justamente o Linux que nunca foi testado. Cancelar um
-      # porque o outro quebrou esconderia a resposta que queremos.
+      # Linux. Cancelar um porque o outro quebrou esconderia a resposta.
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -30,8 +36,7 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      # Sem cache, cada execucao recompila wgpu e naga do zero, o que leva
-      # varios minutos. A chave considera o Cargo.lock e o sistema.
+      # Sem cache, cada execucao recompila wgpu e naga do zero.
       - uses: Swatinem/rust-cache@v2
 
       # Formatacao e a mesma em toda plataforma; rodar duas vezes so gastaria
@@ -40,18 +45,17 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: cargo fmt --all --check
 
-      # `--locked` faz a execucao falhar se o Cargo.lock estiver
-      # desatualizado, em vez de atualiza-lo em silencio e testar um conjunto
-      # de dependencias diferente do que esta commitado.
+      # `--all-targets` ja compila binarios, testes e exemplos, entao um passo
+      # separado de `cargo build` seria uma segunda compilacao inteira do
+      # workspace — era o que mais pesava na primeira execucao.
+      #
+      # `--locked` faz falhar se o Cargo.lock estiver desatualizado, em vez de
+      # atualiza-lo em silencio e testar outro conjunto de dependencias.
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
+      # O editor e o sandbox abrem janela e exigem GPU: o runner nao tem
+      # display nem adaptador grafico. Os testes que rodam aqui sao os de CPU
+      # (matematica e grafo de cena).
       - name: Testes
         run: cargo test --workspace --locked
-
-      # O editor e o sandbox abrem janela e exigem GPU, entao nao ha como
-      # executa-los aqui — o runner nao tem display nem adaptador grafico.
-      # Compilar ja cobre o que importa: que o codigo de janela e de wgpu
-      # continua valido nas duas plataformas.
-      - name: Build
-        run: cargo build --workspace --locked
