@@ -27,7 +27,22 @@ cargo run -p sandbox
 | `RUST_LOG=info,rugine_ui=debug` | Quantas primitivas a UI gera por frame |
 | `WGPU_BACKEND=vulkan\|dx12\|gl` | Força o backend, sobrepondo o padrão |
 | `RUST_LOG=info,rugine_render=debug` | Quantas instâncias vão para a GPU por frame |
+| `RUGINE_VSYNC=0` | Desliga a sincronização, para medir o custo real do frame |
 | `RUGINE_EXIT_AFTER=3` | Sandbox encerra após N segundos (smoke test / CI) |
+
+### Vsync
+
+Ligado por padrão: sem ele a GPU desenha frames que ninguém vê. Desligar serve
+para **medir** — com vsync o contador de FPS mede a taxa do monitor, não o custo
+do frame. No editor, menu Ver › Vsync; em qualquer binário, `RUGINE_VSYNC=0`.
+
+Medido no sandbox (81 cubos, Intel HD 530, build de debug): 60 fps com vsync,
+300–530 fps sem. Ou seja, o vsync estava escondendo uma folga de 5× a 8×.
+
+O controle fica cinza quando a GPU ou o driver não oferecem nenhum modo sem
+sincronização para aquela janela — o `AutoNoVsync` do wgpu cairia para Fifo e a
+opção não faria efeito nenhum. Melhor um controle desabilitado com o motivo no
+tooltip do que um que muda de estado sem mudar o comportamento.
 
 ### Navegação no viewport
 

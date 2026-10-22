@@ -53,6 +53,9 @@ pub fn desenhar(ui: &mut egui::Ui, editor: &mut Editor, ctx: &mut Context<'_>) {
             ui.checkbox(&mut editor.grade, "Grade");
             ui.checkbox(&mut editor.exibir_ui, "UI");
             ui.checkbox(&mut editor.exibir_estatisticas, "Estatisticas");
+
+            ui.separator();
+            vsync(ui, ctx);
         });
 
         ui.menu_button("Jogo", |ui| {
@@ -104,6 +107,28 @@ pub fn desenhar(ui: &mut egui::Ui, editor: &mut Editor, ctx: &mut Context<'_>) {
             }
         });
     });
+}
+
+/// Alternancia de vsync.
+///
+/// Desabilitado quando a surface nao oferece nenhum modo sem sincronizacao:
+/// o `AutoNoVsync` do wgpu cairia para Fifo e o controle nao faria nada. Um
+/// checkbox que muda de estado sem mudar o comportamento e pior do que um
+/// checkbox cinza com o motivo no tooltip.
+fn vsync(ui: &mut egui::Ui, ctx: &mut Context<'_>) {
+    let disponivel = ctx.renderer.sem_vsync_disponivel();
+    let mut ligado = ctx.renderer.vsync();
+
+    let resposta = ui
+        .add_enabled(disponivel, egui::Checkbox::new(&mut ligado, "Vsync"))
+        .on_disabled_hover_text(
+            "Esta GPU/driver so oferece apresentacao sincronizada nesta janela.",
+        )
+        .on_hover_text("Desligue para medir o custo real do frame.");
+
+    if resposta.changed() {
+        ctx.renderer.definir_vsync(ligado);
+    }
 }
 
 /// Minimizar, maximizar/restaurar e fechar.

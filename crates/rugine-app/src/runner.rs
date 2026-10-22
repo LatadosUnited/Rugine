@@ -41,6 +41,13 @@ pub struct EngineConfig {
     pub ui: UiMode,
     /// Quem desenha a barra de titulo.
     pub decoracao: Decoracao,
+    /// Sincronizar a apresentacao com o monitor.
+    ///
+    /// Ligado por padrao: sem isso a GPU desenha frames que ninguem ve.
+    /// Desligar serve para medir o custo real do frame, ja que com vsync o
+    /// contador de fps mede a taxa do monitor. `RUGINE_VSYNC=0` sobrepoe sem
+    /// recompilar.
+    pub vsync: bool,
 }
 
 impl Default for EngineConfig {
@@ -52,6 +59,7 @@ impl Default for EngineConfig {
             exit_on_escape: true,
             ui: UiMode::Disabled,
             decoracao: Decoracao::Sistema,
+            vsync: true,
         }
     }
 }
@@ -301,16 +309,20 @@ impl<A: App> ApplicationHandler for Runner<A> {
         // API do wgpu (por causa do WebGPU), mas no desktop ela resolve de
         // imediato e nao ha runtime async para hospedar. Em wasm isto viraria
         // uma inicializacao em duas fases.
-        let mut renderer =
-            match pollster::block_on(Renderer::new(window.clone(), size.width, size.height)) {
-                Ok(renderer) => renderer,
-                Err(error) => {
-                    return self.fail(
-                        event_loop,
-                        anyhow::Error::new(error).context("falha ao inicializar a GPU"),
-                    );
-                }
-            };
+        let mut renderer = match pollster::block_on(Renderer::new(
+            window.clone(),
+            size.width,
+            size.height,
+            self.config.vsync,
+        )) {
+            Ok(renderer) => renderer,
+            Err(error) => {
+                return self.fail(
+                    event_loop,
+                    anyhow::Error::new(error).context("falha ao inicializar a GPU"),
+                );
+            }
+        };
 
         let ui = match self.config.ui {
             UiMode::Disabled => None,

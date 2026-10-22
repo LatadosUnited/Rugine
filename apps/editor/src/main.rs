@@ -199,6 +199,10 @@ fn main() -> anyhow::Result<()> {
             exit_on_escape: false,
             ui: UiMode::Editor,
             decoracao,
+            // Vsync ligado: um editor passa a maior parte do tempo parado, e
+            // desenhar sem limite so esquentaria a maquina a toa. O menu Ver
+            // desliga quando se quer medir.
+            vsync: true,
         },
         editor,
     )

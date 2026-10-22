@@ -74,6 +74,14 @@ pub struct Renderer {
     /// consulta as capacidades do adapter de novo.
     adapter: wgpu::Adapter,
 
+    /// Se esta surface consegue mesmo apresentar sem sincronizar.
+    ///
+    /// `AutoNoVsync` cai para Fifo quando nem Immediate nem Mailbox existem,
+    /// entao pedir "sem vsync" pode nao desligar nada. Guardamos a resposta
+    /// para a interface poder dizer a verdade em vez de oferecer um controle
+    /// que nao faz efeito.
+    sem_vsync_disponivel: bool,
+
     /// A surface avisou que esta subotima; reconfiguramos antes do proximo
     /// frame em vez de no meio deste, que ainda tem uma textura em voo.
     needs_reconfigure: bool,
@@ -107,7 +115,12 @@ impl Renderer {
     /// de lifetime estatico que *mantem a janela viva* em vez de empresta-la.
     /// Com uma referencia emprestada, a surface herdaria o lifetime da janela e
     /// o runner nao conseguiria guardar as duas na mesma struct.
-    pub async fn new<W>(window: Arc<W>, width: u32, height: u32) -> Result<Self, RenderError>
+    pub async fn new<W>(
+        window: Arc<W>,
+        width: u32,
+        height: u32,
+        vsync: bool,
+    ) -> Result<Self, RenderError>
     where
         W: HasWindowHandle + HasDisplayHandle + Send + Sync + 'static,
     {
@@ -170,9 +183,25 @@ impl Renderer {
             .get_default_config(&adapter, width.max(1), height.max(1))
             .ok_or(RenderError::SurfaceUnsupported)?;
 
-        // AutoVsync evita queimar GPU desenhando frames que ninguem ve. Um modo
-        // sem vsync vira opcao de configuracao quando houver profiling.
-        config.present_mode = wgpu::PresentMode::AutoVsync;
+        // Vsync evita queimar GPU desenhando frames que ninguem ve, e por isso
+        // e o padrao. Desligar serve para medir: com vsync, o contador de fps
+        // mede a taxa do monitor, nao o custo do frame.
+        let vsync = vsync_inicial(vsync);
+        config.present_mode = modo(vsync);
+
+        let capacidades = surface.get_capabilities(&adapter);
+        let sem_vsync_disponivel = capacidades.present_modes.iter().any(|modo| {
+            matches!(
+                modo,
+                wgpu::PresentMode::Immediate | wgpu::PresentMode::Mailbox
+            )
+        });
+
+        if !vsync && !sem_vsync_disponivel {
+            log::warn!(
+                "vsync desligado, mas esta surface so oferece modos sincronizados;                  o pedido cai para Fifo e nada muda"
+            );
+        }
 
         // Permite criar uma view linear da mesma textura da janela. A cena
         // quer o alvo sRGB (a conversao sai de graca no hardware), mas a egui
@@ -220,6 +249,7 @@ impl Renderer {
             device,
             queue,
             adapter,
+            sem_vsync_disponivel,
             needs_reconfigure: false,
             viewport,
             depth_viewport,
@@ -316,6 +346,31 @@ impl Renderer {
     /// Igual a `surface_format` quando a surface ja e linear.
     pub fn ui_format(&self) -> wgpu::TextureFormat {
         self.config.format.remove_srgb_suffix()
+    }
+
+    /// Se a apresentacao esta sincronizada com o monitor.
+    pub fn vsync(&self) -> bool {
+        self.config.present_mode == wgpu::PresentMode::AutoVsync
+    }
+
+    /// Se desligar o vsync tem algum efeito nesta surface.
+    pub fn sem_vsync_disponivel(&self) -> bool {
+        self.sem_vsync_disponivel
+    }
+
+    /// Liga ou desliga a sincronizacao, sem reiniciar.
+    ///
+    /// Reconfigurar a surface descarta a swapchain, entao so faz isso quando
+    /// o modo realmente muda.
+    pub fn definir_vsync(&mut self, ligado: bool) {
+        let desejado = modo(ligado);
+        if self.config.present_mode == desejado {
+            return;
+        }
+
+        self.config.present_mode = desejado;
+        self.surface.configure(&self.device, &self.config);
+        log::info!("present mode: {desejado:?}");
     }
 
     /// Contadores do ultimo frame desenhado.
@@ -554,5 +609,31 @@ impl Renderer {
                 None
             }
         }
+    }
+}
+
+/// Modo de apresentacao para o estado pedido.
+fn modo(vsync: bool) -> wgpu::PresentMode {
+    if vsync {
+        wgpu::PresentMode::AutoVsync
+    } else {
+        wgpu::PresentMode::AutoNoVsync
+    }
+}
+
+/// Estado inicial do vsync, com `RUGINE_VSYNC` tendo a palavra final.
+///
+/// A variavel existe para medir desempenho sem recompilar nem mexer no
+/// codigo da aplicacao: `RUGINE_VSYNC=0` sobe qualquer binario da engine sem
+/// sincronizacao.
+fn vsync_inicial(preferido: bool) -> bool {
+    match std::env::var("RUGINE_VSYNC").ok().as_deref() {
+        Some("0") | Some("false") | Some("off") => false,
+        Some("1") | Some("true") | Some("on") => true,
+        Some(outro) => {
+            log::warn!("RUGINE_VSYNC={outro} nao reconhecido; usando o padrao da aplicacao");
+            preferido
+        }
+        None => preferido,
     }
 }

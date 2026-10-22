@@ -111,6 +111,8 @@ fn main() -> anyhow::Result<()> {
     run(
         EngineConfig {
             title: "Rugine — sandbox".to_owned(),
+            // `RUGINE_VSYNC=0` sobrepoe isto sem recompilar.
+            vsync: true,
             ..Default::default()
         },
         Sandbox {
