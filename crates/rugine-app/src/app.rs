@@ -1,7 +1,7 @@
 //! O contrato entre a engine e o jogo.
 
 use rugine_core::time::Time;
-use rugine_render::Renderer;
+use rugine_render::{CenaGpu, Renderer};
 use rugine_ui::egui;
 use winit::window::Window;
 
@@ -60,12 +60,21 @@ pub struct Context<'a> {
     /// o custo dela ainda nao foi medido.
     pub ui_draws: u32,
 
+    pub(crate) cena: &'a mut CenaGpu,
     pub(crate) window: &'a Window,
     pub(crate) requested_viewport_size: &'a mut Option<[u32; 2]>,
     pub(crate) exit_requested: &'a mut bool,
 }
 
 impl Context<'_> {
+    /// Entrega ao renderer o que desenhar neste frame.
+    ///
+    /// Chamado em `update`. Sem isto, o frame desenha o que foi definido no
+    /// anterior — nada, no primeiro.
+    pub fn definir_cena(&mut self, cena: CenaGpu) {
+        *self.cena = cena;
+    }
+
     /// Pede o encerramento ordenado da aplicacao.
     ///
     /// O frame atual ainda termina; o loop sai depois dele.

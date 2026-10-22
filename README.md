@@ -3,9 +3,11 @@
 Engine de jogos em Rust sobre [wgpu](https://wgpu.rs) — Vulkan, DX12, Metal e
 WebGPU por uma única API.
 
-**Estado: Marco 2.** Editor com painéis, grafo de cena e viewport renderizado
-numa textura. Ainda não dá para fazer um jogo: não há iluminação, meshes,
-física nem scripts.
+**Estado: Marco 3.** Editor com painéis encaixáveis, grafo de cena, câmera
+orbital e profundidade. Cada entidade é desenhada como um cubo na sua matriz de
+mundo, então editar uma transform no Inspector move o objeto no viewport. Ainda
+não dá para fazer um jogo: não há malhas de verdade, materiais, física nem
+scripts.
 
 ## Rodar
 
@@ -24,7 +26,11 @@ cargo run -p sandbox
 | `RUST_LOG=debug` | Logs do wgpu — primeira ferramenta quando um frame sai errado |
 | `RUST_LOG=info,rugine_ui=debug` | Quantas primitivas a UI gera por frame |
 | `WGPU_BACKEND=vulkan\|dx12\|gl` | Força o backend, sobrepondo o padrão |
+| `RUST_LOG=info,rugine_render=debug` | Quantas instâncias vão para a GPU por frame |
 | `RUGINE_EXIT_AFTER=3` | Sandbox encerra após N segundos (smoke test / CI) |
+
+No viewport: botão direito ou do meio orbita, com Shift desloca, a roda
+aproxima, `F` enquadra a seleção e `Q`/`W`/`E`/`R` trocam de ferramenta.
 
 ## Checar o Linux sem CI
 
@@ -139,17 +145,17 @@ Versão recente e com mudanças grandes; quem for mexer na UI vai esbarrar nelas
 Os painéis existem e editam estado real, mas vários botões são forma sem função,
 e isso está dito na própria interface. O que falta, em ordem de dependência:
 
-1. **Teste de pixel headless** — o `RenderTarget` já tem `COPY_SRC`, então ler de
-   volta e verificar em CI é barato agora.
-2. **Câmera e uniforms** — bind group com view-projection, depth buffer. É o que
-   transforma o triângulo numa cena, e o que faz a toolbar do viewport ter o que
-   manipular.
-3. **Gizmos e picking** — clicar numa entidade no viewport, arrastar para mover.
-   Depende de câmera.
-4. **Meshes e assets** — glTF, vertex/index buffers de verdade. Dá conteúdo à
-   aba Projeto.
+1. **Picking e gizmos** — clicar numa entidade no viewport e arrastar para
+   mover. A câmera já existe, então falta o raycast e as alças.
+2. **Teste de pixel headless** — o `RenderTarget` já tem `COPY_SRC`, então ler
+   de volta e verificar é barato. Exige GPU, então não roda nos runners do CI.
+3. **Malhas de verdade** — glTF em vez de um cubo para tudo. Dá conteúdo à aba
+   Projeto.
+4. **Normais com escala não uniforme** — o shader usa a matriz de modelo direto,
+   o que distorce a normal quando a escala não é uniforme. O certo é a
+   transposta da inversa, e isso custa um uniform por instância.
 5. **Iluminação e neblina** — liga os controles do painel Cena, que hoje editam
-   dados que ninguém lê.
+   dados que ninguém lê. A luz atual é uma direção fixa no shader.
 6. **Histórico de comandos** — desfazer/refazer exige que toda mutação de cena
    passe por comandos. Decidir antes do ECS, não depois.
 7. **ECS** — provavelmente `bevy_ecs`, não um próprio. O `rugine-scene` atual é

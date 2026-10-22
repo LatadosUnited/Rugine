@@ -222,6 +222,22 @@ impl Scene {
         &self.roots
     }
 
+    /// Toda entidade viva, em ordem de slot.
+    ///
+    /// Ordem de slot, nao de hierarquia: quem desenha nao se importa com
+    /// parentesco (a matriz de mundo ja o resolve), e percorrer a arvore
+    /// custaria recursao por frame sem ganho nenhum.
+    pub fn entidades(&self) -> impl Iterator<Item = EntityId> + '_ {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| slot.entity.is_some())
+            .map(|(indice, slot)| EntityId {
+                index: indice as u32,
+                generation: slot.generation,
+            })
+    }
+
     /// Quantas entidades vivas existem.
     pub fn len(&self) -> usize {
         self.slots.iter().filter(|s| s.entity.is_some()).count()

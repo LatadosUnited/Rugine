@@ -4,8 +4,12 @@ use std::sync::Arc;
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
+use crate::camera::CameraBinding;
+use crate::cena_gpu::CenaGpu;
+use crate::depth::DepthBuffer;
 use crate::error::RenderError;
-use crate::hello_triangle::HelloTriangle;
+use crate::mesh::{self, Instancia, Mesh};
+use crate::pipelines::Pipelines;
 use crate::target::RenderTarget;
 
 /// Contadores do ultimo frame, para a barra de estatisticas do editor.
@@ -76,8 +80,20 @@ pub struct Renderer {
 
     /// Onde a cena e desenhada no modo editor.
     viewport: RenderTarget,
+    /// Profundidade do alvo offscreen.
+    depth_viewport: DepthBuffer,
+    /// Profundidade quando a cena vai direto para a janela.
+    depth_janela: DepthBuffer,
 
-    hello: HelloTriangle,
+    camera: CameraBinding,
+    pipelines: Pipelines,
+    cubo: Mesh,
+    grade: Mesh,
+
+    /// Buffer de instancias, recriado so quando a cena nao cabe mais nele.
+    instancias: wgpu::Buffer,
+    capacidade_instancias: usize,
+
     stats: RenderStats,
 
     pub clear_color: wgpu::Color,
@@ -182,7 +198,21 @@ impl Renderer {
         // O alvo offscreen usa o mesmo formato da surface, para que um unico
         // pipeline sirva aos dois caminhos (jogo e editor).
         let viewport = RenderTarget::new(&device, config.format, config.width, config.height);
-        let hello = HelloTriangle::new(&device, config.format);
+        let depth_viewport = DepthBuffer::new(&device, config.width, config.height);
+        let depth_janela = DepthBuffer::new(&device, config.width, config.height);
+
+        let camera = CameraBinding::new(&device);
+        let pipelines = Pipelines::new(&device, config.format, camera.layout());
+        let cubo = mesh::cubo(&device);
+        let grade = mesh::grade(&device, 20, 1.0);
+
+        let capacidade_instancias = 256;
+        let instancias = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("rugine::instancias"),
+            size: (capacidade_instancias * size_of::<Instancia>()) as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
         Ok(Self {
             surface,
@@ -192,7 +222,14 @@ impl Renderer {
             adapter,
             needs_reconfigure: false,
             viewport,
-            hello,
+            depth_viewport,
+            depth_janela,
+            camera,
+            pipelines,
+            cubo,
+            grade,
+            instancias,
+            capacidade_instancias,
             stats: RenderStats::default(),
             clear_color: wgpu::Color {
                 r: 0.02,
@@ -223,6 +260,9 @@ impl Renderer {
         self.config.width = width;
         self.config.height = height;
         self.surface.configure(&self.device, &self.config);
+        // O depth tem que ter exatamente o tamanho do alvo de cor, senao o
+        // wgpu recusa o render pass.
+        self.depth_janela.resize(&self.device, width, height);
         self.needs_reconfigure = false;
         true
     }
@@ -232,7 +272,11 @@ impl Renderer {
     /// Retorna `true` se a textura foi recriada — nesse caso quem a exibe
     /// precisa registrar a nova `TextureView`, porque a anterior morreu.
     pub fn resize_viewport(&mut self, width: u32, height: u32) -> bool {
-        self.viewport.resize(&self.device, width, height)
+        let mudou = self.viewport.resize(&self.device, width, height);
+        if mudou {
+            self.depth_viewport.resize(&self.device, width, height);
+        }
+        mudou
     }
 
     pub fn viewport(&self) -> &RenderTarget {
@@ -279,11 +323,57 @@ impl Renderer {
         self.stats
     }
 
-    /// Desenha a cena numa `TextureView` qualquer.
+    /// Envia a cena do frame para a GPU.
     ///
-    /// E o unico lugar que monta o render pass da cena; os dois caminhos
+    /// Chamado antes de desenhar: escreve a matriz de camera e as instancias
+    /// nos buffers. Separado do desenho porque os dois caminhos (janela e
+    /// alvo offscreen) partilham o mesmo envio.
+    pub fn enviar_cena(&mut self, cena: &CenaGpu) {
+        self.camera.atualizar(&self.queue, cena.view_proj);
+
+        if cena.instancias.len() > self.capacidade_instancias {
+            // Cresce em dobro em vez de ajustar exato: redimensionar a cada
+            // entidade criada faria uma realocacao por clique no editor.
+            let nova = (cena.instancias.len() * 2).max(self.capacidade_instancias * 2);
+            self.instancias = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("rugine::instancias"),
+                size: (nova * size_of::<Instancia>()) as wgpu::BufferAddress,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.capacidade_instancias = nova;
+            log::debug!("buffer de instancias cresceu para {nova}");
+        }
+
+        if !cena.instancias.is_empty() {
+            self.queue
+                .write_buffer(&self.instancias, 0, bytemuck::cast_slice(&cena.instancias));
+        }
+
+        log::debug!(
+            "cena: {} instancias, grade={}",
+            cena.instancias.len(),
+            cena.grade
+        );
+
+        // 12 triangulos por cubo; a grade e linha e nao conta como triangulo.
+        self.stats = RenderStats {
+            draw_calls: u32::from(cena.grade) + u32::from(!cena.instancias.is_empty()),
+            triangles: (cena.instancias.len() * 12) as u32,
+        };
+    }
+
+    /// Desenha a cena numa `TextureView`, com o depth correspondente.
+    ///
+    /// E o unico lugar que monta o render pass do mundo; os dois caminhos
     /// (direto na janela, ou no alvo offscreen) passam por aqui.
-    fn draw_scene_into(&mut self, encoder: &mut wgpu::CommandEncoder, view: &wgpu::TextureView) {
+    fn draw_scene_into(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        depth: &DepthBuffer,
+        cena: &CenaGpu,
+    ) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("rugine::scene_pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -295,33 +385,53 @@ impl Renderer {
                     store: wgpu::StoreOp::Store,
                 },
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some(depth.attachment()),
             timestamp_writes: None,
             occlusion_query_set: None,
             multiview_mask: None,
         });
 
-        self.hello.draw(&mut pass);
+        pass.set_bind_group(0, self.camera.bind_group(), &[]);
 
-        self.stats = RenderStats {
-            draw_calls: 1,
-            triangles: 1,
-        };
+        if cena.grade {
+            pass.set_pipeline(&self.pipelines.grade);
+            pass.set_vertex_buffer(0, self.grade.vertices().slice(..));
+            pass.set_index_buffer(
+                self.grade.buffer_indices().slice(..),
+                wgpu::IndexFormat::Uint16,
+            );
+            pass.draw_indexed(0..self.grade.indices(), 0, 0..1);
+        }
+
+        if !cena.instancias.is_empty() {
+            pass.set_pipeline(&self.pipelines.malha);
+            pass.set_vertex_buffer(0, self.cubo.vertices().slice(..));
+            pass.set_vertex_buffer(1, self.instancias.slice(..));
+            pass.set_index_buffer(
+                self.cubo.buffer_indices().slice(..),
+                wgpu::IndexFormat::Uint16,
+            );
+            // Um draw para todas as entidades.
+            pass.draw_indexed(0..self.cubo.indices(), 0, 0..cena.instancias.len() as u32);
+        }
     }
 
     /// Desenha a cena no alvo offscreen do viewport (caminho do editor).
-    pub fn draw_viewport(&mut self) {
+    pub fn draw_viewport(&mut self, cena: &CenaGpu) {
+        self.enviar_cena(cena);
+
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("rugine::viewport_encoder"),
             });
 
-        // A view e clonada para soltar o emprestimo de `self.viewport` antes de
-        // `draw_scene_into` pegar `&mut self`. `TextureView` e um handle
-        // contado por referencia, entao clonar e barato.
-        let view = self.viewport.view().clone();
-        self.draw_scene_into(&mut encoder, &view);
+        self.draw_scene_into(
+            &mut encoder,
+            self.viewport.view(),
+            &self.depth_viewport,
+            cena,
+        );
 
         self.queue.submit(std::iter::once(encoder.finish()));
     }
@@ -334,7 +444,7 @@ impl Renderer {
     /// Nao retorna erro: perder um frame e normal (janela redimensionando,
     /// monitor trocando, compositor ocupado) e a resposta certa e quase sempre
     /// pular o frame, nao propagar falha ate o jogo.
-    pub fn present<F>(&mut self, content: FrameContent, draw: F)
+    pub fn present<F>(&mut self, content: FrameContent, cena: &CenaGpu, draw: F)
     where
         F: FnOnce(SurfacePass<'_>) -> Vec<wgpu::CommandBuffer>,
     {
@@ -361,7 +471,7 @@ impl Renderer {
         // Desenhada aqui dentro, e nao pelo callback: o callback nao pode
         // pegar `&mut self`, ja que `present` o tomou.
         if content == FrameContent::SceneThenUi {
-            self.draw_scene_into(&mut encoder, &view_cena);
+            self.draw_scene_into(&mut encoder, &view_cena, &self.depth_janela, cena);
         }
 
         let extra = draw(SurfacePass {
@@ -378,7 +488,9 @@ impl Renderer {
     }
 
     /// Desenha a cena direto na janela (caminho do jogo, sem editor).
-    pub fn render(&mut self) {
+    pub fn render(&mut self, cena: &CenaGpu) {
+        self.enviar_cena(cena);
+
         let Some(frame) = self.acquire_frame() else {
             return;
         };
@@ -393,7 +505,7 @@ impl Renderer {
                 label: Some("rugine::frame"),
             });
 
-        self.draw_scene_into(&mut encoder, &view);
+        self.draw_scene_into(&mut encoder, &view, &self.depth_janela, cena);
 
         self.queue.submit(std::iter::once(encoder.finish()));
         self.queue.present(frame);

@@ -4,6 +4,7 @@
 //! a engine. Se algum painel precisar de algo que a API publica nao oferece, a
 //! resposta certa e melhorar a API, nao abrir uma porta dos fundos.
 
+mod camera;
 mod docking;
 mod estado;
 mod paineis;
@@ -23,6 +24,39 @@ impl App for Editor {
     }
 
     fn update(&mut self, ctx: &mut Context<'_>) {
+        // Monta a cena de GPU a partir do grafo: uma instancia por entidade
+        // visivel, na sua matriz de mundo. E o que faz editar uma transform
+        // no Inspector mover o cubo no viewport, em vez de o viewport mostrar
+        // uma cena paralela que so coincide por acaso.
+        let selecionada = self.cena.selected();
+        let mut instancias = Vec::with_capacity(self.cena.len());
+
+        for id in self.cena.entidades() {
+            let Some(entidade) = self.cena.get(id) else {
+                continue;
+            };
+            if !entidade.visible {
+                continue;
+            }
+
+            // A selecionada fica laranja: e o unico retorno visual de selecao
+            // enquanto nao houver contorno nem gizmo.
+            let cor = if Some(id) == selecionada {
+                [0.95, 0.62, 0.23, 1.0]
+            } else {
+                [0.62, 0.64, 0.70, 1.0]
+            };
+
+            instancias.push(Instancia::new(self.cena.world_matrix(id), cor));
+        }
+
+        let proporcao = ctx.renderer.viewport().aspect_ratio();
+        ctx.definir_cena(CenaGpu {
+            view_proj: self.camera.view_proj(proporcao),
+            instancias,
+            grade: self.grade,
+        });
+
         // A "compilacao" e simulada: ela existe para que o estado da barra de
         // menu e do painel de scripts seja real, e nao um rotulo fixo. Quando
         // houver scripts de verdade, so a origem do tempo muda.
@@ -115,6 +149,14 @@ fn atalhos(egui: &egui::Context, editor: &mut Editor) {
             && !matches!(editor.compilacao, EstadoCompilacao::Compilando { .. })
         {
             editor.compilacao = EstadoCompilacao::Compilando { segundos: 0.0 };
+        }
+
+        // F enquadra a selecao, como na maioria dos editores 3D.
+        if entrada.key_pressed(egui::Key::F)
+            && let Some(id) = editor.cena.selected()
+        {
+            let posicao = editor.cena.world_matrix(id).transform_point3(Vec3::ZERO);
+            editor.camera.enquadrar(posicao);
         }
 
         if entrada.key_pressed(egui::Key::Delete)

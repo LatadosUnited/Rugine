@@ -1,15 +1,16 @@
-//! Sandbox: a aplicacao que exercita a engine durante o desenvolvimento.
+//! Sandbox: a aplicacao que exercita a engine sem editor.
 //!
-//! Serve de teste de fumaca e de exemplo de como um jogo consome a Rugine.
-//! Se algo aqui ficar complicado de escrever, e sinal de que a API da engine
-//! esta errada.
+//! Serve de teste de fumaca e de exemplo de como um jogo consome a Rugine. Se
+//! algo aqui ficar complicado de escrever, e sinal de que a API esta errada.
+//!
+//! Ao contrario do editor, roda em `UiMode::Disabled`: a cena ocupa a janela
+//! inteira e nao ha egui no caminho. E o modo de um jogo publicado.
 
 use rugine_app::prelude::*;
 
-/// O "jogo": anima a cor de fundo e reporta o framerate.
-///
-/// A cor oscilar prova que o `Time` esta avancando e que estamos realmente
-/// redesenhando, e nao olhando um frame congelado.
+/// Numero de cubos na grade de demonstracao, por lado.
+const LADO: i32 = 4;
+
 struct Sandbox {
     /// Quando reportar o fps da proxima vez, em segundos de execucao.
     next_report: f32,
@@ -23,24 +24,52 @@ struct Sandbox {
 
 impl App for Sandbox {
     fn init(&mut self, ctx: &mut Context<'_>) {
-        let (width, height) = ctx.renderer.size();
-        log::info!("sandbox iniciado em {width}x{height}");
+        let (largura, altura) = ctx.renderer.size();
+        log::info!("sandbox iniciado em {largura}x{altura}");
     }
 
     fn update(&mut self, ctx: &mut Context<'_>) {
         let t = ctx.time.elapsed();
 
-        // Senoides defasadas, remapeadas de [-1, 1] para [0, 1] e escurecidas,
-        // para que o triangulo continue legivel sobre o fundo.
-        ctx.renderer.clear_color = wgpu::Color {
-            r: (t * 0.7).sin() as f64 * 0.5 + 0.5,
-            g: (t * 0.9 + 2.0).sin() as f64 * 0.5 + 0.5,
-            b: (t * 1.1 + 4.0).sin() as f64 * 0.5 + 0.5,
-            a: 1.0,
-        };
-        ctx.renderer.clear_color.r *= 0.15;
-        ctx.renderer.clear_color.g *= 0.15;
-        ctx.renderer.clear_color.b *= 0.2;
+        // Camera orbitando sozinha: sem interacao, e o que prova que a matriz
+        // de view-projection chega a GPU a cada frame.
+        let raio = 11.0;
+        let olho = Vec3::new(
+            raio * (t * 0.25).sin(),
+            5.0 + (t * 0.4).sin() * 1.5,
+            raio * (t * 0.25).cos(),
+        );
+        let view = camera::look_at(olho, Vec3::ZERO, Vec3::Y);
+        let proj = camera::perspective(60f32.to_radians(), ctx.renderer.aspect_ratio(), 0.1, 500.0);
+
+        // Uma grade de cubos pulando em fases diferentes. Eles se cruzam
+        // visualmente, que e justamente o que exige depth buffer: sem ele, o
+        // ultimo desenhado cobriria os outros.
+        let mut instancias = Vec::new();
+        for x in -LADO..=LADO {
+            for z in -LADO..=LADO {
+                let fase = (x + z) as f32 * 0.5;
+                let altura = (t * 1.6 + fase).sin() * 0.8;
+
+                let modelo =
+                    Mat4::from_translation(Vec3::new(x as f32 * 1.6, altura, z as f32 * 1.6));
+
+                // Cor variando no plano, para as faces nao virarem uma massa
+                // cinza unica.
+                let u = (x + LADO) as f32 / (LADO * 2) as f32;
+                let v = (z + LADO) as f32 / (LADO * 2) as f32;
+                instancias.push(Instancia::new(
+                    modelo,
+                    [0.3 + u * 0.6, 0.4, 0.3 + v * 0.6, 1.0],
+                ));
+            }
+        }
+
+        ctx.definir_cena(CenaGpu {
+            view_proj: proj * view,
+            instancias,
+            grade: true,
+        });
 
         if let Some(limite) = self.exit_after
             && t >= limite
@@ -54,11 +83,13 @@ impl App for Sandbox {
 
         if t >= self.next_report {
             self.next_report = t + 1.0;
+            let stats = ctx.renderer.stats();
             log::info!(
-                "{:>6.1} fps | frame {} | delta {:.2} ms",
+                "{:>6.1} fps | frame {} | {} draws | {} tris",
                 ctx.time.fps(),
                 ctx.time.frames(),
-                ctx.time.delta() * 1000.0,
+                stats.draw_calls,
+                stats.triangles,
             );
         }
     }

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use rugine_core::time::Time;
-use rugine_render::{FrameContent, Renderer};
+use rugine_render::{CenaGpu, FrameContent, Renderer};
 use rugine_ui::UiLayer;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -130,6 +130,8 @@ struct State {
     renderer: Renderer,
     ui: Option<UiLayer>,
     time: Time,
+    /// O que desenhar, preenchido pela aplicacao em `update`.
+    cena: CenaGpu,
 }
 
 struct Runner<A: App> {
@@ -166,6 +168,7 @@ impl<A: App> Runner<A> {
             renderer,
             ui,
             time,
+            cena,
         }) = state.as_mut()
         else {
             return;
@@ -183,11 +186,6 @@ impl<A: App> Runner<A> {
             ui.refresh_viewport_texture(renderer.device(), renderer.viewport());
         }
 
-        if config.ui == UiMode::Editor {
-            // Cena para a textura offscreen, antes da UI, que vai exibi-la.
-            renderer.draw_viewport();
-        }
-
         let viewport_texture = ui
             .as_ref()
             .map(|ui| ui.viewport_texture())
@@ -200,21 +198,29 @@ impl<A: App> Runner<A> {
         let mut exit_requested = false;
         let mut requested_size = None;
 
+        // `update` vem antes de qualquer desenho porque e ele que monta a
+        // cena: inverter a ordem desenharia sempre o frame anterior.
         app.update(&mut Context {
             time,
             renderer,
             viewport_texture,
             ui_draws,
+            cena,
             window,
             requested_viewport_size: &mut requested_size,
             exit_requested: &mut exit_requested,
         });
 
+        if config.ui == UiMode::Editor {
+            // Cena para a textura offscreen, antes da UI, que vai exibi-la.
+            renderer.draw_viewport(cena);
+        }
+
         match ui.as_mut() {
             None => {
                 // Sem UI: a cena vai direto para a janela.
                 window.pre_present_notify();
-                renderer.render();
+                renderer.render(cena);
             }
             Some(ui) => {
                 ui.run(window, |raiz| {
@@ -225,6 +231,7 @@ impl<A: App> Runner<A> {
                             renderer,
                             viewport_texture,
                             ui_draws,
+                            cena,
                             window,
                             requested_viewport_size: &mut requested_size,
                             exit_requested: &mut exit_requested,
@@ -248,7 +255,7 @@ impl<A: App> Runner<A> {
                 };
 
                 window.pre_present_notify();
-                renderer.present(content, |pass| ui.paint(pass, background));
+                renderer.present(content, cena, |pass| ui.paint(pass, background));
             }
         }
 
@@ -322,6 +329,7 @@ impl<A: App> ApplicationHandler for Runner<A> {
             renderer,
             ui,
             time: Time::new(),
+            cena: CenaGpu::default(),
         };
 
         let viewport_texture = state
@@ -338,6 +346,7 @@ impl<A: App> ApplicationHandler for Runner<A> {
             renderer: &mut state.renderer,
             viewport_texture,
             ui_draws: 0,
+            cena: &mut state.cena,
             window: &state.window,
             requested_viewport_size: &mut requested_size,
             exit_requested: &mut exit_requested,

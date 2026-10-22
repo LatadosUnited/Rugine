@@ -22,7 +22,7 @@ pub mod prelude {
     pub use crate::{App, Borda, Context, Decoracao, EngineConfig, UiMode, run};
     pub use log;
     pub use rugine_core::prelude::*;
-    pub use rugine_render::{RenderStats, Renderer, wgpu};
+    pub use rugine_render::{CenaGpu, Instancia, RenderStats, Renderer, wgpu};
     pub use rugine_ui::egui;
     pub use winit::keyboard::KeyCode;
 }

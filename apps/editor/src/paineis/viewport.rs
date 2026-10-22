@@ -21,7 +21,9 @@ pub fn desenhar(ui: &mut egui::Ui, editor: &mut Editor, ctx: &mut Context<'_>) {
 
     // A imagem da cena preenche o painel; a barra e as estatisticas sao
     // desenhadas por cima, no mesmo retangulo.
-    let (rect, _resposta) = ui.allocate_exact_size(disponivel, egui::Sense::click_and_drag());
+    let (rect, resposta) = ui.allocate_exact_size(disponivel, egui::Sense::click_and_drag());
+
+    navegar(ui, editor, &resposta);
 
     ui.painter().image(
         ctx.viewport_texture,
@@ -46,6 +48,38 @@ pub fn desenhar(ui: &mut egui::Ui, editor: &mut Editor, ctx: &mut Context<'_>) {
 
     sobreposto.add_space(4.0);
     barra_ferramentas(&mut sobreposto, editor);
+}
+
+/// Traduz mouse e teclado em movimento de camera.
+///
+/// As combinacoes seguem o que a maioria dos editores 3D usa, para nao exigir
+/// reaprender: botao direito ou do meio orbita, Shift com eles desloca, a
+/// roda aproxima. `F` enquadra a selecao.
+fn navegar(ui: &egui::Ui, editor: &mut Editor, resposta: &egui::Response) {
+    let delta = resposta.drag_delta();
+
+    if delta != egui::Vec2::ZERO {
+        let shift = ui.input(|e| e.modifiers.shift);
+        let orbitando = resposta.dragged_by(egui::PointerButton::Secondary)
+            || resposta.dragged_by(egui::PointerButton::Middle);
+
+        if orbitando {
+            if shift {
+                editor.camera.deslocar(delta.x, delta.y);
+            } else {
+                editor.camera.orbitar(delta.x, delta.y);
+            }
+        }
+    }
+
+    // A roda so age com o ponteiro sobre o viewport: sem essa checagem,
+    // rolar a lista da Hierarquia tambem aproximaria a camera.
+    if resposta.hovered() {
+        let roda = ui.input(|e| e.smooth_scroll_delta.y);
+        if roda != 0.0 {
+            editor.camera.aproximar(roda * 0.01);
+        }
+    }
 }
 
 /// Linha de contadores do frame.

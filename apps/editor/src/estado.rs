@@ -1,7 +1,10 @@
 //! Estado do editor: o que os paineis leem e escrevem.
 
 use egui_dock::DockState;
-use rugine_scene::Scene;
+
+use crate::camera::CameraOrbital;
+use rugine_app::prelude::Vec3;
+use rugine_scene::{EntityId, Scene};
 
 use crate::docking::{Aba, layout_padrao};
 
@@ -125,6 +128,9 @@ pub struct Editor {
     /// Ultimo tamanho do viewport em pixels, para a barra de estatisticas.
     pub viewport_px: [u32; 2],
 
+    /// Camera do viewport.
+    pub camera: CameraOrbital,
+
     /// Se a barra de titulo e desenhada por nos.
     ///
     /// Decidido no `main` pela plataforma, e lido pelos paineis para saber se
@@ -154,6 +160,7 @@ impl Default for Editor {
                 "Jogador.cpp".to_owned(),
                 "Sobrevivencia.cpp".to_owned(),
             ],
+            camera: CameraOrbital::default(),
             viewport_px: [0, 0],
             barra_propria: false,
         }
@@ -165,22 +172,80 @@ impl Default for Editor {
 /// Uma hierarquia com profundidade real e o unico jeito de ver se a arvore da
 /// Hierarquia funciona — indentacao, recolher e selecao so aparecem quando ha
 /// filhos de filhos.
+///
+/// As transforms importam tanto quanto os nomes: com tudo na origem, os cubos
+/// se empilham no mesmo ponto e a cena parece ter um objeto so. Espalhados, e
+/// possivel ver o depth buffer separando o que esta na frente, e arrastar um
+/// pai no Inspector move os filhos junto — que e o que prova que a matriz de
+/// mundo compoe.
 fn cena_exemplo() -> Scene {
     let mut cena = Scene::new();
 
-    cena.spawn("Sol", None);
+    let sol = cena.spawn("Sol", None);
+    posicionar(&mut cena, sol, Vec3::new(-3.5, 4.0, -3.0), Vec3::splat(0.6));
 
+    // O "sobrevivente": um boneco de caixas, montado como filho de `Modelo`,
+    // que por sua vez e filho de `Jogador`. Dois niveis de profundidade de
+    // proposito, para exercitar a composicao de transforms.
     let jogador = cena.spawn("Jogador", None);
-    cena.spawn("Camera", Some(jogador));
+    posicionar(&mut cena, jogador, Vec3::new(0.0, 0.0, 0.0), Vec3::ONE);
+
+    let camera = cena.spawn("Camera", Some(jogador));
+    posicionar(
+        &mut cena,
+        camera,
+        Vec3::new(0.0, 1.8, 0.6),
+        Vec3::splat(0.3),
+    );
+
     let modelo = cena.spawn("Modelo", Some(jogador));
-    for indice in 0..7 {
-        cena.spawn(format!("SobreviventeCorpo.{indice}"), Some(modelo));
+    posicionar(&mut cena, modelo, Vec3::ZERO, Vec3::ONE);
+
+    // (posicao, escala) de cada parte, relativas ao `Modelo`.
+    let partes = [
+        (Vec3::new(0.0, 1.55, 0.0), Vec3::new(0.45, 0.45, 0.45)), // cabeca
+        (Vec3::new(0.0, 0.95, 0.0), Vec3::new(0.70, 0.80, 0.40)), // tronco
+        (Vec3::new(-0.50, 0.95, 0.0), Vec3::new(0.22, 0.70, 0.22)), // braco esq
+        (Vec3::new(0.50, 0.95, 0.0), Vec3::new(0.22, 0.70, 0.22)), // braco dir
+        (Vec3::new(-0.20, 0.30, 0.0), Vec3::new(0.25, 0.65, 0.25)), // perna esq
+        (Vec3::new(0.20, 0.30, 0.0), Vec3::new(0.25, 0.65, 0.25)), // perna dir
+        (Vec3::new(0.0, 1.30, 0.0), Vec3::new(0.30, 0.20, 0.30)), // pescoco
+    ];
+
+    for (indice, (posicao, escala)) in partes.into_iter().enumerate() {
+        let parte = cena.spawn(format!("SobreviventeCorpo.{indice}"), Some(modelo));
+        posicionar(&mut cena, parte, posicao, escala);
     }
 
     let hud = cena.spawn("HUD", None);
+    posicionar(&mut cena, hud, Vec3::new(4.0, 1.0, 2.5), Vec3::ONE);
+
     let painel = cena.spawn("PainelStatus", Some(hud));
-    cena.spawn("RotuloVida", Some(painel));
-    cena.spawn("FundoVida", Some(painel));
+    posicionar(&mut cena, painel, Vec3::ZERO, Vec3::new(1.6, 0.9, 0.1));
+
+    let rotulo = cena.spawn("RotuloVida", Some(painel));
+    posicionar(
+        &mut cena,
+        rotulo,
+        Vec3::new(-0.25, 0.2, 0.6),
+        Vec3::splat(0.3),
+    );
+
+    let fundo = cena.spawn("FundoVida", Some(painel));
+    posicionar(
+        &mut cena,
+        fundo,
+        Vec3::new(0.0, -0.2, 0.6),
+        Vec3::new(0.8, 0.15, 0.2),
+    );
 
     cena
+}
+
+/// Atalho para montar a cena de exemplo sem repetir o acesso ao `Transform`.
+fn posicionar(cena: &mut Scene, id: EntityId, posicao: Vec3, escala: Vec3) {
+    if let Some(entidade) = cena.get_mut(id) {
+        entidade.transform.translation = posicao;
+        entidade.transform.scale = escala;
+    }
 }
