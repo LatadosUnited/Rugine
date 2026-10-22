@@ -5,6 +5,7 @@
 //! perdidos), a aquisicao de frames e o desenho do mundo.
 
 mod camera;
+mod captura;
 mod cena_gpu;
 mod depth;
 mod error;
@@ -13,6 +14,7 @@ mod pipelines;
 mod renderer;
 mod target;
 
+pub use captura::Captura;
 pub use cena_gpu::CenaGpu;
 pub use depth::DepthBuffer;
 pub use error::RenderError;

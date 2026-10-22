@@ -27,6 +27,8 @@ cargo run -p sandbox
 | `RUST_LOG=info,rugine_ui=debug` | Quantas primitivas a UI gera por frame |
 | `WGPU_BACKEND=vulkan\|dx12\|gl` | Força o backend, sobrepondo o padrão |
 | `RUST_LOG=info,rugine_render=debug` | Quantas instâncias vão para a GPU por frame |
+| `RUGINE_CAPTURA=saida.png` | Salva o viewport em PNG e encerra |
+| `RUGINE_CAPTURA_FRAME=90` | Em que frame capturar (padrão 30) |
 | `RUGINE_VSYNC=0` | Desliga a sincronização, para medir o custo real do frame |
 | `RUGINE_EXIT_AFTER=3` | Sandbox encerra após N segundos (smoke test / CI) |
 
@@ -62,6 +64,21 @@ Segue o esquema do Unity:
 
 Com `Snap` ligado na barra do viewport, o arrasto da alça anda em degraus do
 tamanho configurado.
+
+## Ver o que foi desenhado
+
+"Nenhum erro de validação" não é o mesmo que "apareceu na tela" — a diferença
+já custou caro aqui. `RUGINE_CAPTURA` lê o viewport de volta e grava um PNG:
+
+```bash
+RUGINE_CAPTURA=/tmp/viewport.png cargo run -p editor
+```
+
+O log também reporta quantos pixels fortemente coloridos a captura tem, o que
+responde "algo foi desenhado?" sem abrir a imagem — útil para bissecionar.
+
+A leitura reordena os canais quando a surface é BGRA. Sem isso a captura mente
+justamente sobre a cor, que costuma ser o que se quer verificar.
 
 ## Checar o Linux sem CI
 

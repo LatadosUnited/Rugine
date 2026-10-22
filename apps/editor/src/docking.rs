@@ -42,20 +42,26 @@ impl Aba {
 
 /// O arranjo inicial, reproduzindo o editor de referencia.
 ///
-/// O `fraction` de cada divisao e quanto o no *antigo* fica — nao o novo.
-/// Trocar isso de lugar e o erro mais facil de cometer aqui, e o resultado e
-/// um painel lateral ocupando tres quartos da tela.
+/// Cuidado com o `fraction`: ele e a posicao do divisor a partir da esquerda
+/// ou do topo, **nao** a parte do no antigo, ao contrario do que a
+/// documentacao da `egui_dock` afirma. Em `split_right` e `split_below` o no
+/// antigo fica desse lado e os dois sentidos coincidem; em `split_left` e
+/// `split_above` quem ocupa a fracao e o no *novo*.
+///
+/// O resultado de errar isso e silencioso: nada quebra, o painel lateral so
+/// nasce ocupando quase toda a largura e o viewport vira uma tira.
 pub fn layout_padrao() -> DockState<Aba> {
     let mut dock = DockState::new(vec![Aba::Viewport]);
     let superficie = dock.main_surface_mut();
 
-    // Coluna esquerda com 20%.
-    let [centro, esquerda] = superficie.split_left(NodeIndex::root(), 0.8, vec![Aba::Hierarquia]);
+    // Coluna esquerda com 20%: em `split_left` a fracao e do no novo.
+    let [centro, esquerda] = superficie.split_left(NodeIndex::root(), 0.2, vec![Aba::Hierarquia]);
 
     // Cena ocupando a metade de baixo da coluna esquerda.
     superficie.split_below(esquerda, 0.5, vec![Aba::Cena]);
 
-    // Inspector a direita com 22%.
+    // Inspector a direita com 22%: aqui a fracao e do no antigo, que fica a
+    // esquerda do divisor.
     let [centro, _] = superficie.split_right(centro, 0.78, vec![Aba::Inspector]);
 
     // Projeto e Scripts como duas abas do mesmo no, embaixo.

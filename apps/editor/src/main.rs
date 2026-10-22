@@ -26,6 +26,8 @@ impl App for Editor {
     }
 
     fn update(&mut self, ctx: &mut Context<'_>) {
+        self.talvez_capturar(ctx);
+
         // Monta a cena de GPU a partir do grafo: uma instancia por entidade
         // visivel, na sua matriz de mundo. E o que faz editar uma transform
         // no Inspector mover o cubo no viewport, em vez de o viewport mostrar
@@ -132,6 +134,74 @@ impl App for Editor {
             paineis::bordas::desenhar(raiz.ctx(), ctx);
         }
     }
+}
+
+impl Editor {
+    /// Salva o viewport em PNG quando `RUGINE_CAPTURA` aponta um caminho.
+    ///
+    /// Existe porque "nenhum erro de validacao" nao e o mesmo que "apareceu
+    /// na tela": sem olhar o resultado, um gizmo pode ser gerado, enviado e
+    /// desenhado sem nunca ficar visivel.
+    ///
+    /// Espera alguns frames antes de capturar: o primeiro frame ainda nao
+    /// tem o viewport no tamanho final, porque a UI so informa o tamanho
+    /// depois de se construir uma vez.
+    fn talvez_capturar(&mut self, ctx: &mut Context<'_>) {
+        let frame_da_captura: u64 = std::env::var("RUGINE_CAPTURA_FRAME")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(30);
+
+        let Some(caminho) = std::env::var("RUGINE_CAPTURA").ok() else {
+            return;
+        };
+        if ctx.time.frames() != frame_da_captura {
+            return;
+        }
+
+        let Some(captura) = ctx.renderer.capturar_viewport() else {
+            log::error!("captura falhou");
+            return;
+        };
+
+        // Conta pixels fortemente coloridos: e o indicador de que o gizmo
+        // chegou a tela, sem precisar abrir a imagem.
+        let coloridos = captura.contar(|[r, g, b, _]| {
+            let maior = r.max(g).max(b) as i32;
+            let menor = r.min(g).min(b) as i32;
+            maior > 90 && maior - menor > 50
+        });
+
+        log::info!(
+            "captura {}x{}: {coloridos} pixels coloridos",
+            captura.largura,
+            captura.altura
+        );
+
+        if let Err(erro) = salvar_png(&caminho, &captura) {
+            log::error!("nao consegui salvar {caminho}: {erro}");
+        } else {
+            log::info!("captura salva em {caminho}");
+        }
+
+        ctx.exit();
+    }
+}
+
+/// Grava a captura como PNG.
+fn salvar_png(caminho: &str, captura: &rugine_render::Captura) -> std::io::Result<()> {
+    let arquivo = std::fs::File::create(caminho)?;
+    let mut encoder = png::Encoder::new(
+        std::io::BufWriter::new(arquivo),
+        captura.largura,
+        captura.altura,
+    );
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+
+    let mut escritor = encoder.write_header()?;
+    escritor.write_image_data(&captura.rgba)?;
+    Ok(())
 }
 
 /// Atalhos globais do editor.

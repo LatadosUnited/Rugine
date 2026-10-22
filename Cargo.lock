@@ -605,8 +605,10 @@ dependencies = [
  "egui_dock",
  "env_logger",
  "log",
+ "png",
  "rugine-app",
  "rugine-core",
+ "rugine-render",
  "rugine-scene",
 ]
 

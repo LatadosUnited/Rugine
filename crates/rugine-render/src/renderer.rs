@@ -5,6 +5,7 @@ use std::sync::Arc;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::camera::CameraBinding;
+use crate::captura::{Captura, ler_textura};
 use crate::cena_gpu::CenaGpu;
 use crate::depth::DepthBuffer;
 use crate::error::RenderError;
@@ -98,9 +99,19 @@ pub struct Renderer {
     cubo: Mesh,
     grade: Mesh,
 
-    /// Buffer de instancias, recriado so quando a cena nao cabe mais nele.
+    /// Buffer de instancias da cena, recriado so quando ela nao cabe mais.
     instancias: wgpu::Buffer,
     capacidade_instancias: usize,
+
+    /// Buffer proprio para as instancias sobrepostas.
+    ///
+    /// Separado, e nao um trecho do buffer da cena: desenhar instancias a
+    /// partir de um deslocamento no meio de um buffer — por `first_instance`
+    /// ou por fatia — nao renderizava nada no driver DX12 desta maquina,
+    /// sem erro de validacao nenhum. Dois buffers custam alguns kilobytes e
+    /// nao dependem desse comportamento.
+    sobrepostas: wgpu::Buffer,
+    capacidade_sobrepostas: usize,
 
     stats: RenderStats,
 
@@ -236,12 +247,11 @@ impl Renderer {
         let grade = mesh::grade(&device, 20, 1.0);
 
         let capacidade_instancias = 256;
-        let instancias = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("rugine::instancias"),
-            size: (capacidade_instancias * size_of::<Instancia>()) as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let instancias = buffer_de_instancias(&device, "rugine::instancias", capacidade_instancias);
+
+        let capacidade_sobrepostas = 128;
+        let sobrepostas =
+            buffer_de_instancias(&device, "rugine::sobrepostas", capacidade_sobrepostas);
 
         Ok(Self {
             surface,
@@ -260,6 +270,8 @@ impl Renderer {
             grade,
             instancias,
             capacidade_instancias,
+            sobrepostas,
+            capacidade_sobrepostas,
             stats: RenderStats::default(),
             clear_color: wgpu::Color {
                 r: 0.02,
@@ -373,6 +385,21 @@ impl Renderer {
         log::info!("present mode: {desejado:?}");
     }
 
+    /// Le o viewport de volta para a CPU.
+    ///
+    /// Bloqueia ate a GPU terminar. E ferramenta de diagnostico e de teste,
+    /// nao caminho de frame.
+    pub fn capturar_viewport(&self) -> Option<Captura> {
+        let (largura, altura) = self.viewport.size();
+        ler_textura(
+            &self.device,
+            &self.queue,
+            self.viewport.texture(),
+            largura,
+            altura,
+        )
+    }
+
     /// Contadores do ultimo frame desenhado.
     pub fn stats(&self) -> RenderStats {
         self.stats
@@ -386,23 +413,28 @@ impl Renderer {
     pub fn enviar_cena(&mut self, cena: &CenaGpu) {
         self.camera.atualizar(&self.queue, cena.view_proj);
 
-        // Os dois conjuntos vivem no mesmo buffer, um apos o outro: o que
-        // separa o desenho deles e o intervalo de instancias do draw, nao um
-        // segundo buffer.
-        let total = cena.instancias.len() + cena.sobrepostas.len();
-
-        if total > self.capacidade_instancias {
+        if cena.instancias.len() > self.capacidade_instancias {
             // Cresce em dobro em vez de ajustar exato: redimensionar a cada
             // entidade criada faria uma realocacao por clique no editor.
-            let nova = (total * 2).max(self.capacidade_instancias * 2);
-            self.instancias = self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("rugine::instancias"),
-                size: (nova * size_of::<Instancia>()) as wgpu::BufferAddress,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            self.capacidade_instancias = nova;
-            log::debug!("buffer de instancias cresceu para {nova}");
+            self.capacidade_instancias = (cena.instancias.len() * 2).max(64);
+            self.instancias = buffer_de_instancias(
+                &self.device,
+                "rugine::instancias",
+                self.capacidade_instancias,
+            );
+            log::debug!(
+                "buffer de instancias cresceu para {}",
+                self.capacidade_instancias
+            );
+        }
+
+        if cena.sobrepostas.len() > self.capacidade_sobrepostas {
+            self.capacidade_sobrepostas = (cena.sobrepostas.len() * 2).max(64);
+            self.sobrepostas = buffer_de_instancias(
+                &self.device,
+                "rugine::sobrepostas",
+                self.capacidade_sobrepostas,
+            );
         }
 
         if !cena.instancias.is_empty() {
@@ -410,12 +442,15 @@ impl Renderer {
                 .write_buffer(&self.instancias, 0, bytemuck::cast_slice(&cena.instancias));
         }
 
-        log::debug!(
-            "cena: {} instancias, {} sobrepostas, grade={}",
-            cena.instancias.len(),
-            cena.sobrepostas.len(),
-            cena.grade
-        );
+        if !cena.sobrepostas.is_empty() {
+            self.queue.write_buffer(
+                &self.sobrepostas,
+                0,
+                bytemuck::cast_slice(&cena.sobrepostas),
+            );
+        }
+
+        let total = cena.instancias.len() + cena.sobrepostas.len();
 
         // 12 triangulos por cubo; a grade e linha e nao conta como triangulo.
         self.stats = RenderStats {
@@ -481,17 +516,14 @@ impl Renderer {
         // Por ultimo e com o pipeline que ignora profundidade: o gizmo
         // precisa ficar agarravel mesmo dentro da geometria.
         if !cena.sobrepostas.is_empty() {
-            let inicio = cena.instancias.len() as u32;
-            let fim = inicio + cena.sobrepostas.len() as u32;
-
             pass.set_pipeline(&self.pipelines.sobreposto);
             pass.set_vertex_buffer(0, self.cubo.vertices().slice(..));
-            pass.set_vertex_buffer(1, self.instancias.slice(..));
+            pass.set_vertex_buffer(1, self.sobrepostas.slice(..));
             pass.set_index_buffer(
                 self.cubo.buffer_indices().slice(..),
                 wgpu::IndexFormat::Uint16,
             );
-            pass.draw_indexed(0..self.cubo.indices(), 0, inicio..fim);
+            pass.draw_indexed(0..self.cubo.indices(), 0, 0..cena.sobrepostas.len() as u32);
         }
     }
 
@@ -660,4 +692,14 @@ fn vsync_inicial(preferido: bool) -> bool {
         }
         None => preferido,
     }
+}
+
+/// Cria um buffer de instancias com a capacidade dada.
+fn buffer_de_instancias(device: &wgpu::Device, nome: &str, capacidade: usize) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(nome),
+        size: (capacidade * size_of::<Instancia>()) as wgpu::BufferAddress,
+        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    })
 }
