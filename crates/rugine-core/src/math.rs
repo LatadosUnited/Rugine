@@ -35,11 +35,7 @@ pub mod camera {
     ///
     /// E a escolha certa para cenas grandes: concentra a precisao do float
     /// perto da camera, onde o z-fighting aparece.
-    pub fn perspective_infinite_reverse(
-        vertical_fov: f32,
-        aspect_ratio: f32,
-        near: f32,
-    ) -> Mat4 {
+    pub fn perspective_infinite_reverse(vertical_fov: f32, aspect_ratio: f32, near: f32) -> Mat4 {
         glam::camera::rh::proj::directx::perspective_infinite_reverse(
             vertical_fov,
             aspect_ratio,
@@ -48,14 +44,7 @@ pub mod camera {
     }
 
     /// Projecao ortografica para o espaco de clip do wgpu.
-    pub fn orthographic(
-        left: f32,
-        right: f32,
-        bottom: f32,
-        top: f32,
-        near: f32,
-        far: f32,
-    ) -> Mat4 {
+    pub fn orthographic(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) -> Mat4 {
         glam::camera::rh::proj::directx::orthographic(left, right, bottom, top, near, far)
     }
 
@@ -87,8 +76,14 @@ mod tests {
         let z_near = no_near.z / no_near.w;
         let z_far = no_far.z / no_far.w;
 
-        assert!(z_near.abs() < 1e-4, "near deveria mapear para 0.0, deu {z_near}");
-        assert!((z_far - 1.0).abs() < 1e-4, "far deveria mapear para 1.0, deu {z_far}");
+        assert!(
+            z_near.abs() < 1e-4,
+            "near deveria mapear para 0.0, deu {z_near}"
+        );
+        assert!(
+            (z_far - 1.0).abs() < 1e-4,
+            "far deveria mapear para 1.0, deu {z_far}"
+        );
     }
 
     #[test]
@@ -97,6 +92,10 @@ mod tests {
         let alvo = view * Vec4::new(0.0, 0.0, 0.0, 1.0);
 
         // Em view space right-handed, o que esta na frente tem Z negativo.
-        assert!(alvo.z < 0.0, "o alvo deveria estar na frente, Z deu {}", alvo.z);
+        assert!(
+            alvo.z < 0.0,
+            "o alvo deveria estar na frente, Z deu {}",
+            alvo.z
+        );
     }
 }

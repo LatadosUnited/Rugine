@@ -13,7 +13,6 @@ use rugine_app::prelude::*;
 
 use estado::{Editor, EstadoCompilacao, Ferramenta};
 
-
 impl App for Editor {
     fn init(&mut self, ctx: &mut Context<'_>) {
         let (largura, altura) = ctx.renderer.size();

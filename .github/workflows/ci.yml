@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  # Permite disparar a mao pela aba Actions, util para revalidar sem commit.
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verificar:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Sem fail-fast de proposito: o Windows passando nao diz nada sobre o
+      # Linux, e e justamente o Linux que nunca foi testado. Cancelar um
+      # porque o outro quebrou esconderia a resposta que queremos.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      # Sem cache, cada execucao recompila wgpu e naga do zero, o que leva
+      # varios minutos. A chave considera o Cargo.lock e o sistema.
+      - uses: Swatinem/rust-cache@v2
+
+      # Formatacao e a mesma em toda plataforma; rodar duas vezes so gastaria
+      # minuto de runner.
+      - name: Formatacao
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --all --check
+
+      # `--locked` faz a execucao falhar se o Cargo.lock estiver
+      # desatualizado, em vez de atualiza-lo em silencio e testar um conjunto
+      # de dependencias diferente do que esta commitado.
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Testes
+        run: cargo test --workspace --locked
+
+      # O editor e o sandbox abrem janela e exigem GPU, entao nao ha como
+      # executa-los aqui — o runner nao tem display nem adaptador grafico.
+      # Compilar ja cobre o que importa: que o codigo de janela e de wgpu
+      # continua valido nas duas plataformas.
+      - name: Build
+        run: cargo build --workspace --locked

@@ -86,11 +86,7 @@ pub fn botao_janela(ui: &mut egui::Ui, icone: IconeJanela) -> egui::Response {
 
     match icone {
         IconeJanela::Minimizar => {
-            pintor.hline(
-                (centro.x - meio)..=(centro.x + meio),
-                centro.y + 0.5,
-                traco,
-            );
+            pintor.hline((centro.x - meio)..=(centro.x + meio), centro.y + 0.5, traco);
         }
         IconeJanela::Maximizar => {
             pintor.rect_stroke(
@@ -225,8 +221,7 @@ pub fn cor_rgb(ui: &mut egui::Ui, cor: &mut rugine_scene::settings::Color) -> bo
         let largura = ((ui.available_width() - 34.0) / 3.0).max(26.0);
 
         for canal in &mut bytes {
-            let resposta =
-                ui.add_sized([largura, 18.0], egui::DragValue::new(canal).speed(1.0));
+            let resposta = ui.add_sized([largura, 18.0], egui::DragValue::new(canal).speed(1.0));
             mudou |= resposta.changed();
         }
 

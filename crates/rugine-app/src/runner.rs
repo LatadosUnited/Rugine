@@ -160,7 +160,10 @@ impl<A: App> Runner<A> {
             .as_ref()
             .map(|ui| ui.viewport_texture())
             .unwrap_or_default();
-        let ui_draws = ui.as_ref().map(|ui| ui.primitive_count() as u32).unwrap_or(0);
+        let ui_draws = ui
+            .as_ref()
+            .map(|ui| ui.primitive_count() as u32)
+            .unwrap_or(0);
 
         let mut exit_requested = false;
         let mut requested_size = None;
@@ -286,7 +289,12 @@ impl<A: App> ApplicationHandler for Runner<A> {
             _ => Some(UiLayer::new(&window, &mut renderer)),
         };
 
-        log::info!("janela {}x{} pronta | ui {:?}", size.width, size.height, self.config.ui);
+        log::info!(
+            "janela {}x{} pronta | ui {:?}",
+            size.width,
+            size.height,
+            self.config.ui
+        );
 
         let mut state = State {
             window,

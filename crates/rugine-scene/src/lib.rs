@@ -293,7 +293,10 @@ mod tests {
 
         assert!(!scene.contains(antigo), "o id antigo deveria estar morto");
         assert!(scene.contains(novo));
-        assert_eq!(antigo.index, novo.index, "o teste so vale se o slot foi reusado");
+        assert_eq!(
+            antigo.index, novo.index,
+            "o teste so vale se o slot foi reusado"
+        );
     }
 
     #[test]
@@ -319,6 +322,9 @@ mod tests {
         let mundo = scene.world_matrix(filho);
         let posicao = mundo.transform_point3(Vec3::ZERO);
 
-        assert!((posicao - Vec3::new(10.0, 5.0, 0.0)).length() < 1e-5, "deu {posicao}");
+        assert!(
+            (posicao - Vec3::new(10.0, 5.0, 0.0)).length() < 1e-5,
+            "deu {posicao}"
+        );
     }
 }

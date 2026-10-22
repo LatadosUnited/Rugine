@@ -56,7 +56,11 @@ impl Time {
 
     /// Frames por segundo instantaneo (1/delta), ou 0 no primeiro frame.
     pub fn fps(&self) -> f32 {
-        if self.delta > 0.0 { 1.0 / self.delta } else { 0.0 }
+        if self.delta > 0.0 {
+            1.0 / self.delta
+        } else {
+            0.0
+        }
     }
 }
 
