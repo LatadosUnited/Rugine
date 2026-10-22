@@ -29,8 +29,21 @@ cargo run -p sandbox
 | `RUST_LOG=info,rugine_render=debug` | Quantas instâncias vão para a GPU por frame |
 | `RUGINE_EXIT_AFTER=3` | Sandbox encerra após N segundos (smoke test / CI) |
 
-No viewport: botão direito ou do meio orbita, com Shift desloca, a roda
-aproxima, `F` enquadra a seleção e `Q`/`W`/`E`/`R` trocam de ferramenta.
+### Navegação no viewport
+
+Segue o esquema do Unity:
+
+| Gesto | Ação |
+|---|---|
+| Botão direito | Olhar em volta, sem sair do lugar |
+| Direito + `WASD` / `QE` | Voar; `Shift` acelera 3× |
+| `Alt` + botão esquerdo | Orbitar em torno do pivô |
+| Botão do meio | Deslocar |
+| Roda | Aproximar |
+| `F` | Enquadrar a seleção |
+| `Q`/`W`/`E`/`R` | Trocar de ferramenta (fora do modo de voo) |
+
+O botão esquerdo sozinho fica livre de propósito: é o que o picking vai usar.
 
 ## Checar o Linux sem CI
 

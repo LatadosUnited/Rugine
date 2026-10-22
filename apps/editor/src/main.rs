@@ -133,6 +133,13 @@ fn atalhos(egui: &egui::Context, editor: &mut Editor) {
         return;
     }
 
+    // Durante o voo, WASDQE pilota a camera. Sem esta saida, voar para a
+    // frente tambem trocaria a ferramenta para Mover, e subir trocaria para
+    // Rotacionar.
+    if editor.voando {
+        return;
+    }
+
     egui.input(|entrada| {
         for (tecla, ferramenta) in [
             (egui::Key::Q, Ferramenta::Selecionar),

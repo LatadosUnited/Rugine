@@ -2,7 +2,7 @@
 
 use egui_dock::DockState;
 
-use crate::camera::CameraOrbital;
+use crate::camera::CameraEditor;
 use rugine_app::prelude::Vec3;
 use rugine_scene::{EntityId, Scene};
 
@@ -129,7 +129,13 @@ pub struct Editor {
     pub viewport_px: [u32; 2],
 
     /// Camera do viewport.
-    pub camera: CameraOrbital,
+    pub camera: CameraEditor,
+
+    /// Se o modo de voo (botao direito segurado) esta ativo.
+    ///
+    /// Guardado entre frames porque o gesto comeca e termina em frames
+    /// diferentes, e precisa sobreviver ao ponteiro sair do viewport.
+    pub voando: bool,
 
     /// Se a barra de titulo e desenhada por nos.
     ///
@@ -160,7 +166,8 @@ impl Default for Editor {
                 "Jogador.cpp".to_owned(),
                 "Sobrevivencia.cpp".to_owned(),
             ],
-            camera: CameraOrbital::default(),
+            camera: CameraEditor::default(),
+            voando: false,
             viewport_px: [0, 0],
             barra_propria: false,
         }

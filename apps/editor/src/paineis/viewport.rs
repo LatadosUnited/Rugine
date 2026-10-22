@@ -1,7 +1,7 @@
 //! Painel Viewport: a cena renderizada, com barra de ferramentas e
 //! estatisticas sobrepostas.
 
-use rugine_app::prelude::{Context, RenderStats, egui};
+use rugine_app::prelude::{Context, RenderStats, Vec3, egui};
 
 use crate::estado::{Editor, Espaco, ExibirColliders, Ferramenta};
 use crate::widgets;
@@ -23,7 +23,7 @@ pub fn desenhar(ui: &mut egui::Ui, editor: &mut Editor, ctx: &mut Context<'_>) {
     // desenhadas por cima, no mesmo retangulo.
     let (rect, resposta) = ui.allocate_exact_size(disponivel, egui::Sense::click_and_drag());
 
-    navegar(ui, editor, &resposta);
+    navegar(ui, editor, &resposta, ctx.time.delta());
 
     ui.painter().image(
         ctx.viewport_texture,
@@ -50,25 +50,73 @@ pub fn desenhar(ui: &mut egui::Ui, editor: &mut Editor, ctx: &mut Context<'_>) {
     barra_ferramentas(&mut sobreposto, editor);
 }
 
-/// Traduz mouse e teclado em movimento de camera.
+/// Traduz mouse e teclado em movimento de camera, no esquema do Unity.
 ///
-/// As combinacoes seguem o que a maioria dos editores 3D usa, para nao exigir
-/// reaprender: botao direito ou do meio orbita, Shift com eles desloca, a
-/// roda aproxima. `F` enquadra a selecao.
-fn navegar(ui: &egui::Ui, editor: &mut Editor, resposta: &egui::Response) {
-    let delta = resposta.drag_delta();
+/// | Gesto                  | Acao                                  |
+/// |------------------------|---------------------------------------|
+/// | Botao direito          | Olhar em volta (camera parada)        |
+/// | Direito + WASD / QE    | Voar; Shift acelera                   |
+/// | Alt + botao esquerdo   | Orbitar em torno do pivo              |
+/// | Botao do meio          | Deslocar                              |
+/// | Roda                   | Aproximar                             |
+/// | F                      | Enquadrar a selecao                   |
+///
+/// O botao esquerdo sozinho fica livre de proposito: no Unity ele seleciona, e
+/// e o que o picking vai usar.
+fn navegar(ui: &egui::Ui, editor: &mut Editor, resposta: &egui::Response, delta_tempo: f32) {
+    let (alt, shift) = ui.input(|e| (e.modifiers.alt, e.modifiers.shift));
+    let direito_pressionado = ui.input(|e| e.pointer.secondary_down());
 
-    if delta != egui::Vec2::ZERO {
-        let shift = ui.input(|e| e.modifiers.shift);
-        let orbitando = resposta.dragged_by(egui::PointerButton::Secondary)
-            || resposta.dragged_by(egui::PointerButton::Middle);
+    // O modo de voo e um estado, nao um gesto: ele comeca quando o direito
+    // desce sobre o viewport e so termina quando o botao sobe, mesmo que o
+    // ponteiro saia do painel no meio do caminho. Sem guardar isso, soltar o
+    // botao fora do viewport deixaria a camera presa voando.
+    if resposta.hovered() && ui.input(|e| e.pointer.button_pressed(egui::PointerButton::Secondary))
+    {
+        editor.voando = true;
+    }
+    if !direito_pressionado {
+        editor.voando = false;
+    }
 
-        if orbitando {
-            if shift {
-                editor.camera.deslocar(delta.x, delta.y);
-            } else {
-                editor.camera.orbitar(delta.x, delta.y);
+    if editor.voando {
+        // Delta global do ponteiro, nao `drag_delta`: o arrasto continua
+        // valendo mesmo com o ponteiro fora do retangulo do viewport.
+        let delta = ui.input(|e| e.pointer.delta());
+        editor.camera.olhar(delta.x, delta.y);
+
+        let mut direcao = Vec3::ZERO;
+        ui.input(|e| {
+            if e.key_down(egui::Key::W) {
+                direcao.z += 1.0;
             }
+            if e.key_down(egui::Key::S) {
+                direcao.z -= 1.0;
+            }
+            if e.key_down(egui::Key::D) {
+                direcao.x += 1.0;
+            }
+            if e.key_down(egui::Key::A) {
+                direcao.x -= 1.0;
+            }
+            if e.key_down(egui::Key::E) {
+                direcao.y += 1.0;
+            }
+            if e.key_down(egui::Key::Q) {
+                direcao.y -= 1.0;
+            }
+        });
+
+        editor.camera.voar(direcao, delta_tempo, shift);
+        return;
+    }
+
+    let delta = resposta.drag_delta();
+    if delta != egui::Vec2::ZERO {
+        if alt && resposta.dragged_by(egui::PointerButton::Primary) {
+            editor.camera.orbitar(delta.x, delta.y);
+        } else if resposta.dragged_by(egui::PointerButton::Middle) {
+            editor.camera.deslocar(delta.x, delta.y);
         }
     }
 
