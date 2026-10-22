@@ -4,7 +4,7 @@ use egui_dock::DockState;
 
 use crate::camera::CameraEditor;
 use crate::gizmo::Eixo;
-use rugine_app::prelude::Vec3;
+use rugine_app::prelude::{Quat, Vec3};
 use rugine_scene::{EntityId, Scene};
 
 use crate::docking::{Aba, layout_padrao};
@@ -193,10 +193,19 @@ impl Default for Editor {
 /// arredondamento que faria o objeto escorregar durante o arrasto.
 pub struct Arrasto {
     pub eixo: Eixo,
-    /// Posicao ao longo do eixo onde o arrasto comecou.
+    /// Posicao ao longo do eixo onde o arrasto comecou. So para mover e
+    /// escalar.
     pub agarre: f32,
     pub translacao_inicial: Vec3,
     pub escala_inicial: Vec3,
+    pub rotacao_inicial: Quat,
+    /// Quanto ja se girou, acumulado e sem saltar ao cruzar meia volta.
+    ///
+    /// `atan2` devolve o angulo em `-pi..pi`, entao passar por 180 graus
+    /// daria um salto de uma volta inteira. Guardar o acumulado e comparar
+    /// com o anterior e o que permite girar varias voltas seguidas.
+    pub angulo_acumulado: f32,
+    pub angulo_anterior: f32,
 }
 
 /// Cena inicial, para o editor nao abrir vazio.

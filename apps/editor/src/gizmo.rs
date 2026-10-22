@@ -28,6 +28,20 @@ impl Eixo {
         }
     }
 
+    /// Base ortonormal do plano perpendicular a este eixo.
+    ///
+    /// `u x v` aponta para o proprio eixo. Essa escolha nao e estetica: e o
+    /// que faz `atan2(v, u)` crescer no sentido anti-horario *visto do lado
+    /// positivo do eixo*, ou seja, no mesmo sentido de uma rotacao positiva
+    /// pela regra da mao direita. Trocar `u` por `v` inverteria o giro.
+    pub fn base(self) -> (Vec3, Vec3) {
+        match self {
+            Self::X => (Vec3::Y, Vec3::Z),
+            Self::Y => (Vec3::Z, Vec3::X),
+            Self::Z => (Vec3::X, Vec3::Y),
+        }
+    }
+
     /// Vermelho/verde/azul para X/Y/Z, a convencao de todo editor 3D.
     pub fn cor(self) -> [f32; 4] {
         match self {
@@ -52,6 +66,10 @@ impl Eixo {
 pub struct Gizmo {
     /// Onde ele esta, em coordenadas de mundo.
     pub origem: Vec3,
+    /// Para onde os eixos apontam.
+    ///
+    /// Identidade no modo Global; a rotacao da entidade no modo Local.
+    pub orientacao: Quat,
     /// Comprimento de uma alca no mundo, ja ajustado pela distancia.
     pub comprimento: f32,
     pub ferramenta: Ferramenta,
@@ -70,8 +88,15 @@ impl Gizmo {
     /// Espessura da alca, como fracao do comprimento.
     const ESPESSURA: f32 = 0.055;
 
+    /// Quantos segmentos formam cada anel.
+    ///
+    /// 28 e o ponto em que o anel ja parece curvo sem o custo virar um
+    /// problema: sao 28 cubos por eixo, 84 instancias so de aneis.
+    const SEGMENTOS: usize = 28;
+
     pub fn new(
         origem: Vec3,
+        orientacao: Quat,
         posicao_camera: Vec3,
         ferramenta: Ferramenta,
         destacado: Option<Eixo>,
@@ -80,15 +105,43 @@ impl Gizmo {
 
         Self {
             origem,
+            orientacao,
             comprimento: distancia * Self::FRACAO_DA_TELA,
             ferramenta,
             destacado,
         }
     }
 
+    /// Direcao do eixo ja orientada pelo modo Global/Local.
+    pub fn eixo_mundo(&self, eixo: Eixo) -> Vec3 {
+        (self.orientacao * eixo.direcao()).normalize_or_zero()
+    }
+
+    /// Base do plano de um anel, ja orientada.
+    pub fn base_mundo(&self, eixo: Eixo) -> (Vec3, Vec3) {
+        let (u, v) = eixo.base();
+        (
+            (self.orientacao * u).normalize_or_zero(),
+            (self.orientacao * v).normalize_or_zero(),
+        )
+    }
+
+    /// Raio dos aneis de rotacao.
+    pub fn raio_anel(&self) -> f32 {
+        self.comprimento * 0.9
+    }
+
     /// Se esta ferramenta desenha alcas.
     pub fn visivel(ferramenta: Ferramenta) -> bool {
-        matches!(ferramenta, Ferramenta::Mover | Ferramenta::Escalar)
+        matches!(
+            ferramenta,
+            Ferramenta::Mover | Ferramenta::Escalar | Ferramenta::Rotacionar
+        )
+    }
+
+    /// Se a ferramenta usa aneis em vez de hastes.
+    pub fn usa_aneis(ferramenta: Ferramenta) -> bool {
+        ferramenta == Ferramenta::Rotacionar
     }
 
     /// Matriz de cada alca, para desenho e para picking.
@@ -98,7 +151,7 @@ impl Gizmo {
     /// clicavel num ponto e visivel em outro.
     pub fn alcas(&self) -> impl Iterator<Item = (Eixo, Mat4)> + '_ {
         Eixo::TODOS.into_iter().map(move |eixo| {
-            let direcao = eixo.direcao();
+            let direcao = self.eixo_mundo(eixo);
             let espessura = self.comprimento * Self::ESPESSURA;
 
             // A haste nasce na origem e vai para o eixo, entao o centro dela
@@ -109,11 +162,12 @@ impl Gizmo {
             // eixo certo. Girar em vez de escalar cada eixo direto mantem uma
             // forma so para as tres alcas.
             let escala = Vec3::new(self.comprimento, espessura, espessura);
-            let rotacao = match eixo {
-                Eixo::X => Quat::IDENTITY,
-                Eixo::Y => Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
-                Eixo::Z => Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
-            };
+            let rotacao = self.orientacao
+                * match eixo {
+                    Eixo::X => Quat::IDENTITY,
+                    Eixo::Y => Quat::from_rotation_z(std::f32::consts::FRAC_PI_2),
+                    Eixo::Z => Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
+                };
 
             (
                 eixo,
@@ -122,8 +176,12 @@ impl Gizmo {
         })
     }
 
-    /// Instancias para desenhar: as hastes mais a ponta de cada eixo.
+    /// Instancias para desenhar.
     pub fn instancias(&self) -> Vec<Instancia> {
+        if Self::usa_aneis(self.ferramenta) {
+            return self.instancias_aneis();
+        }
+
         let mut saida = Vec::with_capacity(7);
 
         for (eixo, modelo) in self.alcas() {
@@ -166,6 +224,55 @@ impl Gizmo {
 
         saida
     }
+
+    /// Um ponto do anel de um eixo, no angulo dado.
+    pub fn ponto_do_anel(&self, eixo: Eixo, angulo: f32) -> Vec3 {
+        let (u, v) = self.base_mundo(eixo);
+        let raio = self.raio_anel();
+        self.origem + (u * angulo.cos() + v * angulo.sin()) * raio
+    }
+
+    /// Aneis desenhados como cubinhos ao longo da circunferencia.
+    ///
+    /// Cubinhos, e nao linhas, para reaproveitar o mesmo pipeline
+    /// instanciado de tudo mais. Um anel de linhas exigiria um buffer
+    /// dinamico so para o gizmo, e nao ficaria mais legivel.
+    fn instancias_aneis(&self) -> Vec<Instancia> {
+        let mut saida = Vec::with_capacity(Eixo::TODOS.len() * Self::SEGMENTOS + 1);
+        let espessura = self.comprimento * Self::ESPESSURA;
+
+        for eixo in Eixo::TODOS {
+            let cor = if self.destacado == Some(eixo) {
+                eixo.cor_destacada()
+            } else {
+                eixo.cor()
+            };
+
+            for passo in 0..Self::SEGMENTOS {
+                let angulo = passo as f32 / Self::SEGMENTOS as f32 * std::f32::consts::TAU;
+
+                saida.push(Instancia::new(
+                    Mat4::from_scale_rotation_translation(
+                        Vec3::splat(espessura),
+                        Quat::IDENTITY,
+                        self.ponto_do_anel(eixo, angulo),
+                    ),
+                    cor,
+                ));
+            }
+        }
+
+        saida.push(Instancia::new(
+            Mat4::from_scale_rotation_translation(
+                Vec3::splat(self.comprimento * 0.07),
+                Quat::IDENTITY,
+                self.origem,
+            ),
+            [0.9, 0.9, 0.92, 1.0],
+        ));
+
+        saida
+    }
 }
 
 #[cfg(test)]
@@ -177,8 +284,19 @@ mod tests {
         // Camera a 10 de distancia, entao o comprimento sai de FRACAO_DA_TELA.
         Gizmo::new(
             Vec3::ZERO,
+            Quat::IDENTITY,
             Vec3::new(0.0, 0.0, 10.0),
             Ferramenta::Mover,
+            None,
+        )
+    }
+
+    fn gizmo_rotacao(orientacao: Quat) -> Gizmo {
+        Gizmo::new(
+            Vec3::ZERO,
+            orientacao,
+            Vec3::new(0.0, 0.0, 10.0),
+            Ferramenta::Rotacionar,
             None,
         )
     }
@@ -234,9 +352,10 @@ mod tests {
     }
 
     #[test]
-    fn escalar_e_mover_desenham_alcas_e_selecionar_nao() {
+    fn so_selecionar_nao_desenha_alcas() {
         assert!(Gizmo::visivel(Ferramenta::Mover));
         assert!(Gizmo::visivel(Ferramenta::Escalar));
+        assert!(Gizmo::visivel(Ferramenta::Rotacionar));
         assert!(!Gizmo::visivel(Ferramenta::Selecionar));
     }
 
@@ -245,16 +364,97 @@ mod tests {
     fn comprimento_acompanha_a_distancia() {
         let perto = Gizmo::new(
             Vec3::ZERO,
+            Quat::IDENTITY,
             Vec3::new(0.0, 0.0, 5.0),
             Ferramenta::Mover,
             None,
         );
         let longe = Gizmo::new(
             Vec3::ZERO,
+            Quat::IDENTITY,
             Vec3::new(0.0, 0.0, 50.0),
             Ferramenta::Mover,
             None,
         );
         assert!(longe.comprimento > perto.comprimento * 9.0);
+    }
+
+    /// `u x v` tem que apontar para o proprio eixo. Se a base estiver
+    /// trocada, o angulo cresce ao contrario e girar vai para o lado errado.
+    #[test]
+    fn base_do_anel_segue_a_mao_direita() {
+        for eixo in Eixo::TODOS {
+            let (u, v) = eixo.base();
+            let produto = u.cross(v);
+            assert!(
+                (produto - eixo.direcao()).length() < 1e-5,
+                "base de {eixo:?} da {produto}, esperado {}",
+                eixo.direcao()
+            );
+        }
+    }
+
+    /// O ponto em angulo zero tem que cair sobre o primeiro vetor da base, e
+    /// a um raio de distancia do centro.
+    #[test]
+    fn ponto_do_anel_comeca_na_base() {
+        let gizmo = gizmo_rotacao(Quat::IDENTITY);
+
+        for eixo in Eixo::TODOS {
+            let (u, _) = eixo.base();
+            let ponto = gizmo.ponto_do_anel(eixo, 0.0);
+            let esperado = u * gizmo.raio_anel();
+
+            assert!(
+                (ponto - esperado).length() < 1e-4,
+                "anel de {eixo:?} em angulo 0 deu {ponto}, esperado {esperado}"
+            );
+        }
+    }
+
+    /// Todo ponto do anel fica a um raio do centro, em qualquer angulo.
+    #[test]
+    fn anel_e_circular() {
+        let gizmo = gizmo_rotacao(Quat::IDENTITY);
+        let raio = gizmo.raio_anel();
+
+        for passo in 0..12 {
+            let angulo = passo as f32 / 12.0 * std::f32::consts::TAU;
+            for eixo in Eixo::TODOS {
+                let distancia = (gizmo.ponto_do_anel(eixo, angulo) - gizmo.origem).length();
+                assert!(
+                    (distancia - raio).abs() < 1e-4,
+                    "{eixo:?} em {angulo}: distancia {distancia}, raio {raio}"
+                );
+            }
+        }
+    }
+
+    /// No modo Local os eixos acompanham a rotacao da entidade.
+    #[test]
+    fn orientacao_local_gira_os_eixos() {
+        let meia_volta_em_z = Quat::from_rotation_z(std::f32::consts::FRAC_PI_2);
+        let gizmo = gizmo_rotacao(meia_volta_em_z);
+
+        // Girados 90 graus em Z, o eixo X do objeto aponta para +Y no mundo.
+        let x = gizmo.eixo_mundo(Eixo::X);
+        assert!(
+            (x - Vec3::Y).length() < 1e-5,
+            "X local deveria apontar para +Y, apontou {x}"
+        );
+
+        // E Z nao muda, por ser o eixo do giro.
+        let z = gizmo.eixo_mundo(Eixo::Z);
+        assert!(
+            (z - Vec3::Z).length() < 1e-5,
+            "Z deveria ficar parado, deu {z}"
+        );
+    }
+
+    #[test]
+    fn rotacionar_usa_aneis_e_as_outras_nao() {
+        assert!(Gizmo::usa_aneis(Ferramenta::Rotacionar));
+        assert!(!Gizmo::usa_aneis(Ferramenta::Mover));
+        assert!(!Gizmo::usa_aneis(Ferramenta::Escalar));
     }
 }

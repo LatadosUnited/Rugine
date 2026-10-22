@@ -48,6 +48,27 @@ impl Raio {
         Self::new(perto, longe - perto)
     }
 
+    /// Intersecao com um plano infinito.
+    ///
+    /// Retorna o `t` do encontro, ou `None` quando o raio e paralelo ao
+    /// plano (nunca encontra) ou quando o encontro fica atras da origem.
+    ///
+    /// E a base do gizmo de rotacao: um anel vive num plano, entao achar
+    /// onde o mouse cruza esse plano e o primeiro passo para saber em que
+    /// ponto do anel o usuario pegou.
+    pub fn intersecta_plano(&self, ponto: Vec3, normal: Vec3) -> Option<f32> {
+        let denominador = normal.dot(self.direcao);
+
+        // Paralelo: ou o raio esta dentro do plano (infinitas solucoes) ou
+        // fora dele (nenhuma). Nos dois casos nao ha um ponto util.
+        if denominador.abs() < 1e-7 {
+            return None;
+        }
+
+        let t = normal.dot(ponto - self.origem) / denominador;
+        if t < 0.0 { None } else { Some(t) }
+    }
+
     /// Intersecao com uma caixa unitaria centrada na origem, depois de
     /// transformada por `modelo`.
     ///
@@ -224,6 +245,34 @@ mod tests {
         );
 
         assert!(raio.intersecta_caixa(Mat4::IDENTITY).is_some());
+    }
+
+    #[test]
+    fn plano_na_frente_e_encontrado() {
+        let raio = raio_para_frente();
+        let t = raio.intersecta_plano(Vec3::ZERO, Vec3::Z).unwrap();
+
+        assert!((t - 5.0).abs() < 1e-4, "esperado 5.0, deu {t}");
+        assert!(raio.em(t).length() < 1e-4, "deveria cruzar na origem");
+    }
+
+    #[test]
+    fn plano_paralelo_nao_e_encontrado() {
+        // Paralelo e a direcao ser perpendicular a *normal*, nao alinhada
+        // com ela: o raio anda em Z, o plano tem normal X, e o raio fica
+        // para sempre em x = 5.
+        let raio = Raio::new(Vec3::new(5.0, 0.0, 0.0), Vec3::Z);
+        assert_eq!(raio.intersecta_plano(Vec3::ZERO, Vec3::X), None);
+    }
+
+    #[test]
+    fn plano_atras_nao_e_encontrado() {
+        // Plano em z = 10, raio partindo de z = 5 na direcao -Z.
+        let raio = raio_para_frente();
+        assert_eq!(
+            raio.intersecta_plano(Vec3::new(0.0, 0.0, 10.0), Vec3::Z),
+            None
+        );
     }
 
     /// Clicar no alto da tela tem que mirar acima do centro, nao abaixo.

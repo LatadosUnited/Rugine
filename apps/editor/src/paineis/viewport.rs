@@ -211,9 +211,19 @@ fn barra_ferramentas(ui: &mut egui::Ui, editor: &mut Editor) {
 
             separador(ui);
 
+            // Escalar ignora este modo: escala vive no espaco do objeto, e
+            // uma alca de escala num eixo de mundo nao teria como ser
+            // aplicada a um objeto girado. O tooltip diz isso em vez de
+            // deixar o botao parecer quebrado.
+            let dica = if editor.ferramenta == Ferramenta::Escalar {
+                "Escalar e sempre no espaco do objeto"
+            } else {
+                "Alterna entre referencial global e local"
+            };
+
             let rotulo_espaco = editor.espaco.rotulo();
             if widgets::botao_alternavel(ui, false, rotulo_espaco)
-                .on_hover_text("Alterna entre referencial global e local")
+                .on_hover_text(dica)
                 .clicked()
             {
                 editor.espaco = match editor.espaco {
