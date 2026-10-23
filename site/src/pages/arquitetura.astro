@@ -1,0 +1,242 @@
+---
+import Base from "../layouts/Base.astro";
+import { caminho } from "../data/caminho";
+import { CAIXAS, POR_CAIXA } from "../data/crates";
+
+// --- geometria do diagrama -------------------------------------------------
+const L = 196;
+const A = 62;
+const PASSO_X = 216;
+const PASSO_Y = 104;
+const CAMADAS = Math.max(...CAIXAS.map((c) => c.camada)) + 1;
+const COLUNAS = Math.max(...CAIXAS.map((c) => c.coluna)) + 1;
+const LARGURA = COLUNAS * PASSO_X;
+const ALTURA = CAMADAS * PASSO_Y;
+
+// A camada 0 fica embaixo: as setas descem para o que a crate usa.
+const pos = (c: (typeof CAIXAS)[number]) => ({
+  x: c.coluna * PASSO_X + (PASSO_X - L) / 2,
+  y: (CAMADAS - 1 - c.camada) * PASSO_Y + (PASSO_Y - A) / 2,
+});
+
+const setas = CAIXAS.flatMap((c) =>
+  c.usa.map((u) => {
+    const a = pos(c);
+    const b = pos(POR_CAIXA[u]!);
+    const x1 = a.x + L / 2;
+    const y1 = a.y + A;
+    const x2 = b.x + L / 2;
+    const y2 = b.y;
+    const meio = (y2 - y1) * 0.5;
+    return { d: `M${x1} ${y1} C${x1} ${y1 + meio}, ${x2} ${y2 - meio}, ${x2} ${y2}` };
+  }),
+);
+
+const REPO = "https://github.com/LatadosUnited/Rugine";
+---
+
+<Base
+  titulo="Arquitetura"
+  descricao="As cinco crates da Rugine, o que cada uma conhece, o que deliberadamente não conhece, e por que a ordem das camadas é essa."
+>
+  <p class="olho">Rugine · arquitetura</p>
+  <h1>Cinco crates e uma regra</h1>
+  <p class="chamada">
+    Uma crate só pode depender de camadas abaixo da sua. A regra não é burocracia: é o que mantém o
+    renderizador ignorante do <code>winit</code> e o <code>core</code> ignorante de todo o resto — e
+    o que faz trocar o backend de janela não tocar no renderizador.
+  </p>
+
+  <figure class="diagrama">
+    <svg
+      viewBox={`0 0 ${LARGURA} ${ALTURA}`}
+      width={LARGURA}
+      height={ALTURA}
+      role="img"
+      aria-label="Diagrama de camadas: core embaixo, depois render e scene, ui, app, e por cima as aplicações editor e sandbox."
+    >
+      {
+        setas.map((s) => (
+          <path d={s.d} fill="none" stroke="#b99558" stroke-width="1.5" opacity="0.7" />
+        ))
+      }
+      {
+        CAIXAS.map((c) => {
+          const p = pos(c);
+          return (
+            <g>
+              <rect
+                x={p.x}
+                y={p.y}
+                width={L}
+                height={A}
+                fill={c.app ? "#183444" : "#1b2c39"}
+                stroke={c.app ? "#74b6cc" : "#b99558"}
+              />
+              <text x={p.x + 14} y={p.y + 26} class="cx-nome">{c.nome}</text>
+              <text x={p.x + 14} y={p.y + 45} class="cx-dep">
+                {c.usa.length ? `usa ${c.usa.join(", ")}` : "não usa nada da engine"}
+              </text>
+            </g>
+          );
+        })
+      }
+    </svg>
+    <figcaption>
+      As setas apontam para o que a crate usa. As duas caixas azuis são aplicações, não bibliotecas.
+    </figcaption>
+  </figure>
+
+  <h2>O que cada uma faz</h2>
+  <div class="cartoes">
+    {
+      [...CAIXAS].reverse().map((c) => (
+        <article class={`ficha${c.app ? " app" : ""}`}>
+          <h3>
+            <a href={`${REPO}/tree/master/engine/${c.app ? c.nome : `crates/${c.nome}`}`}>
+              {c.nome}
+            </a>
+          </h3>
+          <p>{c.papel}</p>
+          <dl>
+            <div>
+              <dt>Usa</dt>
+              <dd>{c.usa.length ? c.usa.map((u) => POR_CAIXA[u]!.nome).join(" · ") : "nada da engine"}</dd>
+            </div>
+            {c.externas.length > 0 && (
+              <div>
+                <dt>Externas</dt>
+                <dd class="mono">{c.externas.join(" · ")}</dd>
+              </div>
+            )}
+            {c.naoConhece && (
+              <div>
+                <dt>Não conhece</dt>
+                <dd class="recusa">{c.naoConhece}</dd>
+              </div>
+            )}
+          </dl>
+        </article>
+      ))
+    }
+  </div>
+
+  <h2>Uma fonte de verdade para as versões</h2>
+  <p>
+    Todas as dependências são declaradas uma única vez, em <code>[workspace.dependencies]</code> na
+    raiz do workspace, e cada crate escreve <code>wgpu.workspace = true</code>. Com cinco crates,
+    versões espalhadas pelos manifestos é o caminho mais curto para duas versões de
+    <code>wgpu</code> no mesmo binário — e esse é um erro que aparece como tipo incompatível em
+    lugares que não têm nada a ver com o problema.
+  </p>
+  <p>
+    A <code>egui</code> está presa na 0.36 por causa da <code>egui_dock</code>, que é quem fornece os
+    painéis encaixáveis e ainda não acompanhou a 0.37. Prender não custou nada no renderizador: a
+    <code>egui-wgpu</code> 0.36.2 já exige <code>wgpu 30.0</code>, a mesma da engine.
+  </p>
+
+  <h2>Builds de debug jogáveis</h2>
+  <p>
+    O perfil <code>dev</code> deixa o código da engine em <code>opt-level = 1</code> — ainda
+    depurável — e manda todas as dependências para <code>3</code>:
+  </p>
+  <pre><code>[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3</code></pre>
+  <p>
+    O motivo é prático: <code>wgpu</code> e <code>naga</code> dominam o tempo de frame num build de
+    debug, e não são depurados aqui. Sem isso, debug não é jogável; com isso, é.
+  </p>
+
+  <h2>De onde vem cada decisão</h2>
+  <p>
+    As escolhas por trás dessas camadas estão abertas uma a uma em
+    <a href={caminho("decisoes/")}>Decisões</a>, e o que falta construir sobre elas está em
+    <a href={caminho("arvore/")}>Árvore de pesquisa</a>.
+  </p>
+</Base>
+
+<style>
+  .chamada {
+    font-size: 17px;
+    max-width: 68ch;
+  }
+  .diagrama {
+    margin: 26px 0 30px;
+    padding: 0;
+  }
+  .diagrama svg {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--linha-fina);
+    background: var(--prancha);
+    padding: 10px;
+  }
+  .diagrama figcaption {
+    font-size: 13px;
+    color: var(--apagado);
+    margin-top: 8px;
+  }
+  .cx-nome {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 500;
+    fill: var(--ouro-claro);
+  }
+  .cx-dep {
+    font-family: var(--corpo);
+    font-size: 12.5px;
+    fill: #97a3a4;
+  }
+
+  .cartoes {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 30px;
+  }
+  .cartoes h3 {
+    margin: 0 0 4px;
+    font-family: var(--mono);
+    font-size: 16px;
+    letter-spacing: 0;
+  }
+  .cartoes h3 a {
+    text-decoration: none;
+  }
+  .cartoes h3 a:hover {
+    text-decoration: underline;
+  }
+  .cartoes .app {
+    border-left: 2px solid var(--disponivel-borda);
+  }
+  .cartoes p {
+    margin: 0 0 8px;
+  }
+  .cartoes dl {
+    margin: 0;
+    display: grid;
+    gap: 3px;
+    font-size: 14px;
+  }
+  .cartoes dl div {
+    display: flex;
+    gap: 8px;
+  }
+  .cartoes dt {
+    font-family: var(--display);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--ouro);
+    flex: none;
+    width: 108px;
+  }
+  .cartoes dd {
+    margin: 0;
+    color: var(--suave);
+  }
+  .cartoes .recusa {
+    color: #d49a8a;
+  }
+</style>

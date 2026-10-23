@@ -1,0 +1,28 @@
+---
+import Base from "../layouts/Base.astro";
+import Arvore from "../components/Arvore.astro";
+---
+
+<Base
+  titulo="Árvore de pesquisa"
+  descricao="O que já existe na Rugine, o que dá para fazer agora e o que ainda está bloqueado, como uma árvore de tecnologias que corre de cima para baixo."
+  largura="largo"
+>
+  <Arvore />
+
+  <p class="nota">
+    Pesquisado é o que está no <code>master</code>, com o commit que o trouxe. Disponível é o que já
+    tem todos os pré-requisitos prontos. A fila segue a ordem recomendada: desfazer primeiro, porque
+    o funil da cena já existe; depois luz e iluminação, que dão uso ao painel Cena; depois malhas de
+    glTF.
+  </p>
+</Base>
+
+<style>
+  .nota {
+    margin: 16px 0 0;
+    font-size: 14px;
+    color: var(--apagado);
+    max-width: 92ch;
+  }
+</style>

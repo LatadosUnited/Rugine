@@ -1,2 +1,3 @@
-/target
+# Sem barra no inicio: o build fica em engine/target.
+target/
 **/*.rs.bk

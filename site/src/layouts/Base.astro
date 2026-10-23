@@ -1,0 +1,78 @@
+---
+import "../styles/global.css";
+import { caminho, mesmaPagina } from "../data/caminho";
+
+interface Props {
+  titulo: string;
+  descricao: string;
+  /** A arvore quer a tela toda; um texto quer uma coluna legivel. */
+  largura?: "texto" | "normal" | "largo";
+}
+
+const { titulo, descricao, largura = "normal" } = Astro.props;
+
+const MENU = [
+  { href: caminho(), nome: "Início" },
+  { href: caminho("arvore/"), nome: "Árvore" },
+  { href: caminho("arquitetura/"), nome: "Arquitetura" },
+  { href: caminho("diario/"), nome: "Diário" },
+  { href: caminho("decisoes/"), nome: "Decisões" },
+];
+
+const aqui = Astro.url.pathname;
+const classe = largura === "normal" ? "envelope" : `envelope ${largura}`;
+---
+
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{titulo} · Rugine</title>
+    <meta name="description" content={descricao} />
+    <meta property="og:title" content={`${titulo} · Rugine`} />
+    <meta property="og:description" content={descricao} />
+    <meta name="theme-color" content="#0e171e" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%230e171e'/%3E%3Cpath d='M12 3.5l7 4v9l-7 4-7-4v-9z' fill='none' stroke='%23e6c88e' stroke-width='1.7'/%3E%3Ccircle cx='12' cy='12' r='3' fill='%23b99558'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@500;600;700&family=Alegreya+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    />
+  </head>
+  <body>
+    <header class="cabecalho">
+      <div class="envelope largo">
+        <a class="marca" href={caminho()}>RUGINE<span>engine em Rust sobre wgpu</span></a>
+        <nav class="navegacao" aria-label="Seções">
+          {
+            MENU.map((m) => (
+              <a href={m.href} aria-current={mesmaPagina(m.href, aqui) ? "page" : undefined}>
+                {m.nome}
+              </a>
+            ))
+          }
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <div class={classe}>
+        <slot />
+      </div>
+    </main>
+
+    <footer class="rodape">
+      <div class="envelope largo">
+        <span>Rugine · MIT OR Apache-2.0 · site estático feito com Astro</span>
+        <span>
+          <a href="https://github.com/LatadosUnited/Rugine">github.com/LatadosUnited/Rugine</a>
+        </span>
+      </div>
+    </footer>
+  </body>
+</html>

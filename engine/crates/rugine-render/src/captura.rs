@@ -30,10 +30,8 @@ impl Captura {
     /// E o que transforma "parece certo" em numero: contar pixels de uma cor
     /// esperada responde se algo foi desenhado, sem olhar.
     pub fn contar(&self, predicado: impl Fn([u8; 4]) -> bool) -> usize {
-        self.rgba
-            .chunks_exact(4)
-            .filter(|p| predicado([p[0], p[1], p[2], p[3]]))
-            .count()
+        let (pixels, _) = self.rgba.as_chunks::<4>();
+        pixels.iter().filter(|&&p| predicado(p)).count()
     }
 }
 
@@ -132,8 +130,9 @@ pub(crate) fn ler_textura(
         let fatia = &dados[inicio..inicio + bytes_crus as usize];
 
         if trocar_rb {
-            for pixel in fatia.chunks_exact(4) {
-                rgba.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
+            let (pixels, _) = fatia.as_chunks::<4>();
+            for &[b, g, r, a] in pixels {
+                rgba.extend_from_slice(&[r, g, b, a]);
             }
         } else {
             rgba.extend_from_slice(fatia);

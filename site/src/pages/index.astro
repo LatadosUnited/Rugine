@@ -1,0 +1,337 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../layouts/Base.astro";
+import Selo from "../components/Selo.astro";
+import { caminho } from "../data/caminho";
+import { dataCurta } from "../data/datas";
+import {
+  AREAS,
+  CONTAGENS,
+  FILA,
+  ORDEM_AREAS,
+  PERCENTUAL,
+  POR_ID,
+  ROTULO_ESTADO,
+  TOTAL,
+  estado,
+  porArea,
+} from "../data/arvore";
+
+const diario = (await getCollection("diario")).sort((a, b) => b.data.marco - a.data.marco);
+const ultimo = diario[0]!;
+const decisoes = (await getCollection("decisoes")).sort((a, b) => a.data.ordem - b.data.ordem);
+
+const porAreaContagem = ORDEM_AREAS.map((a) => {
+  const itens = porArea(a);
+  return {
+    id: a,
+    ...AREAS[a],
+    total: itens.length,
+    prontos: itens.filter((t) => t.pronto).length,
+  };
+});
+---
+
+<Base
+  titulo="Início"
+  descricao="Rugine: engine de jogos em Rust sobre wgpu, com editor próprio. Estado do projeto, árvore de pesquisa, diário de desenvolvimento e decisões técnicas."
+  largura="largo"
+>
+  <section class="capa">
+    <div>
+      <p class="olho">Engine de jogos em Rust sobre wgpu</p>
+      <h1>Rugine</h1>
+      <p class="chamada">
+        Vulkan, DX12, Metal e WebGPU por uma única API, com um editor de painéis encaixáveis escrito
+        na própria engine. <b>Marco 4:</b> grafo de cena, câmera orbital, gizmos, componentes e cenas
+        salvas em arquivo. Ainda não dá para fazer um jogo — não há malhas de verdade, materiais,
+        física nem scripts, e o site diz exatamente o que falta.
+      </p>
+      <div class="acoes">
+        <a class="botao" href={caminho("arvore/")}>Ver a árvore de pesquisa</a>
+        <a class="botao vazio" href="https://github.com/LatadosUnited/Rugine">Código no GitHub</a>
+      </div>
+      <pre><code>cd engine
+cargo run -p editor</code></pre>
+    </div>
+
+    <aside class="ficha ouro placar">
+      <h2>Onde está</h2>
+      <div class="contagem">
+        <span><b>{CONTAGENS.pesquisado}</b> de {TOTAL} pesquisadas</span>
+        <span><b>{CONTAGENS.disponivel}</b> disponíveis</span>
+        <span><b>{CONTAGENS.bloqueado}</b> bloqueadas</span>
+      </div>
+      <div class="barra"><i style={`width:${PERCENTUAL.toFixed(1)}%`}></i></div>
+      <ul class="lista-limpa frentes">
+        {
+          porAreaContagem.map((a) => (
+            <li>
+              <Selo area={a.id} tamanho={34} />
+              <span>
+                <b style={`color:${a.cor}`}>{a.nome}</b>
+                <small>{a.resumo}</small>
+              </span>
+              <em>
+                {a.prontos}/{a.total}
+              </em>
+            </li>
+          ))
+        }
+      </ul>
+    </aside>
+  </section>
+
+  <section class="secao">
+    <h2>A próxima pesquisa</h2>
+    <p class="intro">
+      A ordem não é gosto: cada item só aparece aqui quando todos os pré-requisitos estão prontos, e
+      desfazer vem primeiro porque o funil da cena já existe.
+    </p>
+    <ol class="proxima">
+      {
+        FILA.map((id, i) => {
+          const t = POR_ID[id]!;
+          const st = estado(t);
+          return (
+            <li>
+              <a href={`${caminho("arvore/")}#c-${id}`}>
+                <span class="n">{i + 1}</span>
+                <span class="corpo">
+                  <b>{t.nome}</b>
+                  <span class={`estado ${st}`}>{ROTULO_ESTADO[st]}</span>
+                  <small>{t.desc}</small>
+                </span>
+              </a>
+            </li>
+          );
+        })
+      }
+    </ol>
+  </section>
+
+  <section class="secao">
+    <h2>Ler o projeto</h2>
+    <div class="grade">
+      <a class="ficha cartao-link" href={caminho("arvore/")}>
+        <h3>Árvore de pesquisa</h3>
+        <p>
+          Todas as {TOTAL} peças, de cima para baixo, com o que cada uma libera e o commit que a
+          trouxe.
+        </p>
+      </a>
+      <a class="ficha cartao-link" href={caminho("arquitetura/")}>
+        <h3>Arquitetura</h3>
+        <p>As cinco crates, o que cada uma pode conhecer e por que a ordem é essa.</p>
+      </a>
+      <a class="ficha cartao-link" href={caminho("diario/")}>
+        <h3>Diário</h3>
+        <p>
+          {diario.length} marcos, em ordem. O que ficou de pé, o que custou tempo e o que só apareceu
+          com uma captura de tela.
+        </p>
+      </a>
+      <a class="ficha cartao-link" href={caminho("decisoes/")}>
+        <h3>Decisões</h3>
+        <p>
+          {decisoes.length} escolhas com os dois lados: o que foi adotado e o que foi descartado, com
+          o motivo.
+        </p>
+      </a>
+    </div>
+  </section>
+
+  <section class="secao">
+    <h2>Último marco</h2>
+    <a class="ficha ouro ultimo" href={caminho(`diario/${ultimo.id}/`)}>
+      <p class="olho">Marco {ultimo.data.marco} · {dataCurta(ultimo.data.data)}</p>
+      <h3>{ultimo.data.titulo}</h3>
+      <p>{ultimo.data.resumo}</p>
+    </a>
+  </section>
+</Base>
+
+<style>
+  .capa {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    gap: 24px 36px;
+    align-items: start;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--ouro);
+  }
+  @media (max-width: 900px) {
+    .capa {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .chamada {
+    font-size: 17.5px;
+    max-width: 64ch;
+    margin: 12px 0 18px;
+  }
+  .chamada b {
+    color: var(--ouro-claro);
+  }
+  .acoes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .botao {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    color: #1b1408;
+    background: linear-gradient(180deg, var(--ouro-claro), #c9a567);
+    border: 1px solid var(--ouro);
+    padding: 7px 18px 8px;
+  }
+  .botao:hover {
+    color: #0d0a04;
+    filter: brightness(1.08);
+  }
+  .botao.vazio {
+    background: var(--painel);
+    color: var(--ouro-claro);
+    border-color: var(--linha-fina);
+  }
+  .botao.vazio:hover {
+    border-color: var(--ouro);
+    filter: none;
+  }
+
+  .placar {
+    display: grid;
+    gap: 12px;
+  }
+  .placar h2 {
+    margin: 0;
+    font-size: 22px;
+  }
+  .contagem {
+    display: grid;
+    gap: 2px;
+    font-size: 14.5px;
+    color: var(--suave);
+    font-variant-numeric: tabular-nums;
+  }
+  .contagem b {
+    color: var(--pergaminho);
+  }
+  .frentes li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .frentes span {
+    min-width: 0;
+    flex: 1;
+  }
+  .frentes b {
+    font-family: var(--display);
+    font-size: 17px;
+    letter-spacing: 0.05em;
+    display: block;
+    line-height: 1.1;
+  }
+  .frentes small {
+    color: var(--suave);
+    font-size: 12.5px;
+  }
+  .frentes em {
+    font-family: var(--mono);
+    font-style: normal;
+    font-size: 13px;
+    color: var(--ouro-claro);
+  }
+
+  .secao {
+    margin-top: 34px;
+  }
+  .intro {
+    color: var(--suave);
+    max-width: 70ch;
+    margin: 0 0 14px;
+  }
+
+  .proxima {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+  }
+  .proxima a {
+    display: flex;
+    gap: 12px;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid var(--linha-fina);
+    background: #15222c;
+    padding: 10px 14px;
+  }
+  .proxima a:hover {
+    border-color: var(--ouro);
+  }
+  .proxima .n {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--ouro-claro);
+    color: #1b1408;
+    font: 700 14px/24px var(--corpo);
+    text-align: center;
+  }
+  .proxima .corpo {
+    display: grid;
+    gap: 4px;
+    justify-items: start;
+  }
+  .proxima b {
+    font-family: var(--display);
+    font-size: 19px;
+    letter-spacing: 0.04em;
+    color: var(--ouro-claro);
+  }
+  .proxima small {
+    font-size: 14px;
+    color: var(--suave);
+  }
+
+  .cartao-link {
+    text-decoration: none;
+    color: inherit;
+    display: grid;
+    gap: 4px;
+    align-content: start;
+  }
+  .cartao-link:hover {
+    border-color: var(--ouro);
+  }
+  .cartao-link p {
+    margin: 0;
+    font-size: 14.5px;
+    color: var(--suave);
+  }
+
+  .ultimo {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+  }
+  .ultimo:hover {
+    filter: brightness(1.06);
+  }
+  .ultimo h3 {
+    margin: 4px 0 6px;
+  }
+  .ultimo p:last-child {
+    margin: 0;
+    color: var(--suave);
+  }
+</style>

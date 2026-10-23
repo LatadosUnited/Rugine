@@ -1,0 +1,228 @@
+---
+import Selo from "./Selo.astro";
+import { AREAS } from "../data/areas";
+import { eraDoNivel } from "../data/eras";
+import { FILA, LIBERADOS, POR_ID, ROTULO_ESTADO, estado, type Tecnologia } from "../data/arvore";
+
+interface Props {
+  t: Tecnologia;
+  oculto?: boolean;
+}
+
+const { t, oculto = false } = Astro.props;
+
+const st = estado(t);
+const era = eraDoNivel(t.nivel);
+const libera = LIBERADOS[t.id] ?? [];
+const naFila = FILA.indexOf(t.id);
+const REPO = "https://github.com/LatadosUnited/Rugine";
+
+const ligacao = (id: string) => {
+  const o = POR_ID[id]!;
+  return { id, nome: o.nome, estado: estado(o), area: o.area, mesmaArea: o.area === t.area };
+};
+---
+
+<div class="painel" id={`p-${t.id}`} data-painel={t.id} hidden={oculto}>
+  <div class="cab">
+    <Selo area={t.area} tamanho={56} />
+    <div>
+      <h3>{t.nome}</h3>
+      <div class="sub">{AREAS[t.area].nome} · {era.n}, {era.nome}</div>
+    </div>
+  </div>
+
+  <span class={`estado ${st}`}>{ROTULO_ESTADO[st]}</span>
+
+  <p class="desc">{t.desc}</p>
+
+  {
+    t.pronto && (
+      <div class="origem">
+        Pesquisado no commit{" "}
+        <a href={`${REPO}/commit/${t.pronto}`} class="mono"><b>{t.pronto}</b></a>
+      </div>
+    )
+  }
+  {
+    !t.pronto && naFila >= 0 && (
+      <div class="origem">
+        Posição <b>{naFila + 1}</b> na fila de pesquisa
+      </div>
+    )
+  }
+
+  {
+    t.efeitos.length > 0 && (
+      <div>
+        <h4>Efeitos</h4>
+        <ul class="efeitos">
+          {t.efeitos.map((e) => (
+            <li>{e}</li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
+  <div>
+    <h4>Requer</h4>
+    <div class="ligacoes">
+      {
+        t.req.length === 0 ? (
+          <span class="vazio">Nenhum. É uma raiz da árvore.</span>
+        ) : (
+          t.req.map(ligacao).map((l) => (
+            <button type="button" data-ir={l.id}>
+              <i style={`background:var(--${l.estado}-fundo);border-color:var(--${l.estado}-borda)`} />
+              {l.nome}
+              {!l.mesmaArea && (
+                <span style={`color:${AREAS[l.area].cor};font-size:11.5px`}>· {AREAS[l.area].nome}</span>
+              )}
+            </button>
+          ))
+        )
+      }
+    </div>
+  </div>
+
+  <div>
+    <h4>Libera</h4>
+    <div class="ligacoes">
+      {
+        libera.length === 0 ? (
+          <span class="vazio">Ainda nada depende disto.</span>
+        ) : (
+          libera.map(ligacao).map((l) => (
+            <button type="button" data-ir={l.id}>
+              <i style={`background:var(--${l.estado}-fundo);border-color:var(--${l.estado}-borda)`} />
+              {l.nome}
+              {!l.mesmaArea && (
+                <span style={`color:${AREAS[l.area].cor};font-size:11.5px`}>· {AREAS[l.area].nome}</span>
+              )}
+            </button>
+          ))
+        )
+      }
+    </div>
+  </div>
+
+  {
+    t.onde && t.onde.length > 0 && (
+      <div>
+        <h4>No código</h4>
+        <ul class="arquivos">
+          {t.onde.map((f) => (
+            <li>
+              <a class="mono" href={`${REPO}/blob/master/${f}`}>{f}</a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+</div>
+
+<style>
+  .painel {
+    border: 1px solid var(--ouro);
+    background: linear-gradient(180deg, #1b2c39, var(--painel));
+    padding: 16px 18px 18px;
+    display: grid;
+    gap: 13px;
+    align-content: start;
+    min-width: 0;
+  }
+  .painel[hidden] {
+    display: none;
+  }
+  .cab {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  h3 {
+    font-size: 25px;
+    line-height: 1.05;
+    margin: 0;
+  }
+  .sub {
+    font-size: 13px;
+    color: var(--suave);
+    margin-top: 3px;
+  }
+  .estado {
+    justify-self: start;
+  }
+  .desc {
+    margin: 0;
+    max-width: 62ch;
+  }
+  h4 {
+    font-size: 16px;
+    letter-spacing: 0.1em;
+    margin: 0 0 6px;
+    color: var(--ouro);
+    border-bottom: 1px solid var(--linha-fina);
+    padding-bottom: 3px;
+  }
+  .efeitos {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 4px;
+    font-size: 15px;
+  }
+  .efeitos li::marker {
+    color: var(--ouro);
+  }
+  .ligacoes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .ligacoes button {
+    font: 500 14px var(--corpo);
+    color: var(--pergaminho);
+    background: #0f1a21;
+    border: 1px solid var(--linha-fina);
+    padding: 3px 9px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ligacoes button:hover {
+    border-color: var(--ouro);
+  }
+  .ligacoes button i {
+    width: 8px;
+    height: 8px;
+    display: inline-block;
+    border: 1px solid;
+  }
+  .vazio {
+    color: var(--apagado);
+    font-size: 14px;
+  }
+  .origem {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--suave);
+  }
+  .origem b {
+    color: var(--ouro-claro);
+    font-weight: 500;
+  }
+  .arquivos {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 3px;
+  }
+  .arquivos a {
+    font-size: 12.5px;
+    word-break: break-all;
+  }
+</style>

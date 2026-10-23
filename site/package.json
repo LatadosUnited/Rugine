@@ -1,0 +1,21 @@
+{
+  "name": "rugine-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Paginas sobre a Rugine: arvore de pesquisa, diario, arquitetura e decisoes.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "astro": "^7.4.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,168 @@
+---
+import type { GetStaticPaths } from "astro";
+import { getCollection, render } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import { caminho } from "../../data/caminho";
+import { AREAS } from "../../data/areas";
+
+export const getStaticPaths = (async () => {
+  const decisoes = (await getCollection("decisoes")).sort((a, b) => a.data.ordem - b.data.ordem);
+  return decisoes.map((decisao, i) => ({
+    params: { slug: decisao.id },
+    props: {
+      decisao,
+      anterior: decisoes[i - 1] ?? null,
+      proximo: decisoes[i + 1] ?? null,
+    },
+  }));
+}) satisfies GetStaticPaths;
+
+const { decisao, anterior, proximo } = Astro.props;
+const { Content } = await render(decisao);
+
+const NOME_AREA: Record<string, string> = {
+  nucleo: AREAS.nucleo.nome,
+  render: AREAS.render.nome,
+  editor: AREAS.editor.nome,
+  projeto: "Projeto",
+};
+const COR_AREA: Record<string, string> = {
+  nucleo: AREAS.nucleo.cor,
+  render: AREAS.render.cor,
+  editor: AREAS.editor.cor,
+  projeto: "#b99558",
+};
+const cor = COR_AREA[decisao.data.area]!;
+---
+
+<Base titulo={decisao.data.titulo} descricao={decisao.data.resumo} largura="texto">
+  <p class="olho">
+    <a href={caminho("decisoes/")}>Decisões</a> ·
+    <span style={`color:${cor}`}>{NOME_AREA[decisao.data.area]}</span>
+  </p>
+  <h1>{decisao.data.titulo}</h1>
+  <p class="resumo">{decisao.data.resumo}</p>
+
+  <dl class="lados">
+    <div class="sim">
+      <dt>Adotado</dt>
+      <dd>{decisao.data.escolha}</dd>
+    </div>
+    <div class="nao">
+      <dt>Descartado</dt>
+      <dd>{decisao.data.descartado}</dd>
+    </div>
+  </dl>
+
+  <div class="prosa">
+    <Content />
+  </div>
+
+  <nav class="passos" aria-label="Outras decisões">
+    {
+      anterior ? (
+        <a href={caminho(`decisoes/${anterior.id}/`)}>
+          <small>← anterior</small>
+          {anterior.data.titulo}
+        </a>
+      ) : (
+        <span />
+      )
+    }
+    {
+      proximo ? (
+        <a class="direita" href={caminho(`decisoes/${proximo.id}/`)}>
+          <small>próxima →</small>
+          {proximo.data.titulo}
+        </a>
+      ) : (
+        <span />
+      )
+    }
+  </nav>
+</Base>
+
+<style>
+  .olho a {
+    text-decoration: none;
+  }
+  .resumo {
+    font-size: 17.5px;
+    border-left: 2px solid var(--ouro);
+    padding-left: 14px;
+    margin: 14px 0 20px;
+  }
+  .lados {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 0 0 26px;
+  }
+  @media (max-width: 560px) {
+    .lados {
+      grid-template-columns: 1fr;
+    }
+  }
+  .lados div {
+    border: 1px solid;
+    padding: 9px 13px 11px;
+  }
+  .lados dt {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 12.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--suave);
+  }
+  .lados dd {
+    margin: 2px 0 0;
+    font-size: 16px;
+  }
+  .sim {
+    border-color: var(--pesquisado-borda);
+    background: var(--pesquisado-fundo);
+  }
+  .sim dd {
+    color: var(--ouro-claro);
+  }
+  .nao {
+    border-color: var(--bloqueado-borda);
+    background: var(--bloqueado-fundo);
+  }
+  .nao dd {
+    color: var(--suave);
+    text-decoration: line-through;
+    text-decoration-color: #6d4a4a;
+  }
+
+  .passos {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 40px;
+    border-top: 1px solid var(--linha-fina);
+    padding-top: 16px;
+  }
+  .passos a {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 17px;
+    text-decoration: none;
+    border: 1px solid var(--linha-fina);
+    padding: 9px 13px;
+    display: grid;
+    gap: 2px;
+  }
+  .passos a:hover {
+    border-color: var(--ouro);
+  }
+  .passos a.direita {
+    text-align: right;
+  }
+  .passos small {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--suave);
+  }
+</style>
