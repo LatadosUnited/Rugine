@@ -7,7 +7,7 @@
 //! arbitrarias e milhares de objetos.
 
 use rugine_app::prelude::{Mat4, Raio, Vec3};
-use rugine_scene::{EntityId, Scene};
+use rugine_scene::{EntityId, Malha, Scene};
 
 use crate::gizmo::{Alca, Eixo, Gizmo};
 
@@ -42,7 +42,9 @@ fn mais_proxima(cena: &Scene, raio: &Raio) -> Option<Acerto> {
         let Some(dados) = cena.get(entidade) else {
             continue;
         };
-        if !dados.visible {
+        // Sem Malha tambem nao: nada foi desenhado ali. Um no de agrupamento
+        // continua selecionavel pela Hierarquia.
+        if !dados.visible || !cena.tem::<Malha>(entidade) {
             continue;
         }
 

@@ -150,24 +150,31 @@ pub fn botao_alternavel(ui: &mut egui::Ui, ativo: bool, texto: &str) -> egui::Re
 
 /// Linha de propriedade: rotulo a esquerda com largura fixa, controle a direita.
 ///
-/// A largura fixa e o que mantem os controles alinhados entre si no Inspector,
-/// em vez de cada linha comecar numa coluna diferente conforme o tamanho do
-/// rotulo.
+/// A coluna do rotulo tem a mesma largura em todas as linhas, o que mantem os
+/// controles alinhados entre si no Inspector, em vez de cada linha comecar
+/// numa coluna diferente conforme o tamanho do rotulo.
+///
+/// A coluna encolhe em painel estreito, e o rotulo que nao couber termina em
+/// reticencias: sem isso, ele empurraria os controles para fora do painel.
 pub fn propriedade<R>(
     ui: &mut egui::Ui,
     rotulo: &str,
     conteudo: impl FnOnce(&mut egui::Ui) -> R,
 ) -> R {
+    let coluna = (ui.available_width() * 0.28).clamp(52.0, 84.0);
+
     ui.horizontal(|ui| {
         ui.add_sized(
-            [84.0, 18.0],
+            [coluna, 18.0],
             egui::Label::new(
                 egui::RichText::new(rotulo)
                     .size(12.0)
                     .color(egui::Color32::from_gray(165)),
             )
-            .halign(egui::Align::LEFT),
-        );
+            .halign(egui::Align::LEFT)
+            .truncate(),
+        )
+        .on_hover_text(rotulo);
         conteudo(ui)
     })
     .inner
@@ -185,17 +192,30 @@ pub fn campos_xyz(ui: &mut egui::Ui, valores: &mut [f32; 3], velocidade: f32) ->
     ];
     const NOMES: [&str; 3] = ["X", "Y", "Z"];
 
+    /// Largura reservada para cada letra de eixo.
+    const LETRA: f32 = 9.0;
+    const ESPACO: f32 = 3.0;
+
     let mut mudou = false;
 
     ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 3.0;
-        let largura = ((ui.available_width() - 6.0) / 3.0 - 14.0).max(28.0);
+        ui.spacing_mut().item_spacing.x = ESPACO;
+        // Seis itens (letra e campo, tres vezes) e cinco espacos entre eles.
+        // A letra entra na conta com largura fixa: medida pelo texto, ela
+        // variava com a fonte e a soma passava da borda.
+        let largura = ((ui.available_width() - 3.0 * LETRA - 5.0 * ESPACO) / 3.0).max(18.0);
+        // O `DragValue` tem largura minima de `interact_size.x`; sem baixar o
+        // minimo, os campos nao encolhem e a linha estoura em painel estreito.
+        ui.spacing_mut().interact_size.x = largura;
 
         for eixo in 0..3 {
-            ui.label(
-                egui::RichText::new(NOMES[eixo])
-                    .size(11.0)
-                    .color(CORES[eixo]),
+            ui.add_sized(
+                [LETRA, 18.0],
+                egui::Label::new(
+                    egui::RichText::new(NOMES[eixo])
+                        .size(11.0)
+                        .color(CORES[eixo]),
+                ),
             );
             let resposta = ui.add_sized(
                 [largura, 18.0],
@@ -216,14 +236,24 @@ pub fn cor_rgb(ui: &mut egui::Ui, cor: &mut rugine_scene::settings::Color) -> bo
     let mut bytes = cor.to_u8();
     let mut mudou = false;
 
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 3.0;
-        let largura = ((ui.available_width() - 34.0) / 3.0).max(26.0);
+    const ESPACO: f32 = 3.0;
 
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = ESPACO;
+        // Tres campos, o botao de cor e tres espacos entre os quatro. O botao
+        // tem a largura de `interact_size` da egui, e nao um numero chutado:
+        // chutado, a linha passava da borda e o painel ganhava rolagem lateral.
+        let botao = ui.spacing().interact_size.x;
+        let largura = ((ui.available_width() - botao - 3.0 * ESPACO) / 3.0).max(18.0);
+
+        // O minimo do `DragValue` baixa so para os campos; o botao de cor usa o
+        // mesmo `interact_size`, entao ele e restaurado antes do botao.
+        ui.spacing_mut().interact_size.x = largura;
         for canal in &mut bytes {
             let resposta = ui.add_sized([largura, 18.0], egui::DragValue::new(canal).speed(1.0));
             mudou |= resposta.changed();
         }
+        ui.spacing_mut().interact_size.x = botao;
 
         let mut rgb = [cor.r, cor.g, cor.b];
         if ui.color_edit_button_rgb(&mut rgb).changed() {

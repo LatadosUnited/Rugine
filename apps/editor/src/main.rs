@@ -4,7 +4,9 @@
 //! a engine. Se algum painel precisar de algo que a API publica nao oferece, a
 //! resposta certa e melhorar a API, nao abrir uma porta dos fundos.
 
+mod arestas;
 mod camera;
+mod componentes;
 mod docking;
 mod estado;
 mod gizmo;
@@ -14,7 +16,8 @@ mod widgets;
 
 use rugine_app::prelude::*;
 
-use estado::{Editor, EstadoCompilacao, Ferramenta};
+use estado::{Editor, EstadoCompilacao, ExibirColliders, Ferramenta};
+use rugine_scene::{Colisor, Malha};
 
 impl App for Editor {
     fn init(&mut self, ctx: &mut Context<'_>) {
@@ -29,30 +32,37 @@ impl App for Editor {
         self.talvez_capturar(ctx);
 
         // Monta a cena de GPU a partir do grafo: uma instancia por entidade
-        // visivel, na sua matriz de mundo. E o que faz editar uma transform
-        // no Inspector mover o cubo no viewport, em vez de o viewport mostrar
-        // uma cena paralela que so coincide por acaso.
+        // visivel com Malha, na sua matriz de mundo. E o que faz editar uma
+        // transform no Inspector mover o cubo no viewport, em vez de o
+        // viewport mostrar uma cena paralela que so coincide por acaso.
+        //
+        // Sem Malha, nada e desenhado: um no de agrupamento como `Jogador`
+        // existe so para carregar filhos e nao deve virar um cubo.
         let selecionada = self.cena.selected();
         let mut instancias = Vec::with_capacity(self.cena.len());
 
-        for id in self.cena.entidades() {
-            let Some(entidade) = self.cena.get(id) else {
-                continue;
-            };
-            if !entidade.visible {
+        for (id, malha) in self.cena.com::<Malha>() {
+            if !self.cena.get(id).is_some_and(|e| e.visible) {
                 continue;
             }
 
-            // A selecionada fica laranja: e o unico retorno visual de selecao
-            // enquanto nao houver contorno nem gizmo.
-            let cor = if Some(id) == selecionada {
-                [0.95, 0.62, 0.23, 1.0]
-            } else {
-                [0.62, 0.64, 0.70, 1.0]
-            };
+            let mundo = self.cena.world_matrix(id);
+            let cor = [malha.cor.r, malha.cor.g, malha.cor.b, 1.0];
+            instancias.push(Instancia::new(mundo, cor));
 
-            instancias.push(Instancia::new(self.cena.world_matrix(id), cor));
+            if Some(id) == selecionada {
+                // Mais grossa que a do colisor: metade da barra fica dentro do
+                // objeto, e na espessura fina o laranja sombreado some contra
+                // uma Malha de cor parecida.
+                let espessura = self.espessura_aresta(mundo) * 2.5;
+                arestas::selecao(mundo, espessura, &mut instancias);
+            }
         }
+
+        // Colisores depois do contorno: onde os dois coincidem (um colisor do
+        // tamanho da Malha), as barras sao identicas, o teste de profundidade
+        // fica com a primeira, e a selecao continua visivel.
+        self.instancias_colisores(&mut instancias);
 
         // O gizmo e reconstruido todo frame a partir da selecao e da
         // camera: ele escala com a distancia, entao guardar seria guardar
@@ -137,6 +147,32 @@ impl App for Editor {
 }
 
 impl Editor {
+    /// Arestas dos colisores, conforme a opcao "Exibir colliders".
+    fn instancias_colisores(&self, saida: &mut Vec<Instancia>) {
+        let selecionada = self.cena.selected();
+
+        for (id, colisor) in self.cena.com::<Colisor>() {
+            let exibir = match self.colliders {
+                ExibirColliders::Nunca => false,
+                ExibirColliders::Selecionado => Some(id) == selecionada,
+                ExibirColliders::Todos => true,
+            };
+            if !exibir || !self.cena.get(id).is_some_and(|e| e.visible) {
+                continue;
+            }
+
+            let mundo = self.cena.world_matrix(id);
+            arestas::colisor(colisor, mundo, self.espessura_aresta(mundo), saida);
+        }
+    }
+
+    /// Espessura das arestas, proporcional a distancia da camera: largura
+    /// constante na tela, pelo mesmo motivo do tamanho do gizmo.
+    fn espessura_aresta(&self, mundo: Mat4) -> f32 {
+        let distancia = (mundo.transform_point3(Vec3::ZERO) - self.camera.posicao()).length();
+        distancia * 0.003
+    }
+
     /// Salva o viewport em PNG quando `RUGINE_CAPTURA` aponta um caminho.
     ///
     /// Existe porque "nenhum erro de validacao" nao e o mesmo que "apareceu

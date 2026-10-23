@@ -193,21 +193,27 @@ Versão recente e com mudanças grandes; quem for mexer na UI vai esbarrar nelas
 Os painéis existem e editam estado real, mas vários botões são forma sem função,
 e isso está dito na própria interface. O que falta, em ordem de dependência:
 
-1. **Gizmo de rotação** — mover e escalar existem; girar precisa de
-   interseção com anéis, que é outra conta.
-2. **Teste de pixel headless** — o `RenderTarget` já tem `COPY_SRC`, então ler
-   de volta e verificar é barato. Exige GPU, então não roda nos runners do CI.
-3. **Malhas de verdade** — glTF em vez de um cubo para tudo. Dá conteúdo à aba
-   Projeto.
-4. **Normais com escala não uniforme** — o shader usa a matriz de modelo direto,
+1. **Teste de pixel headless** — a captura (`RUGINE_CAPTURA`) já lê o viewport
+   de volta; falta virar asserção. Exige GPU, então não roda nos runners do CI.
+2. **Malhas de verdade** — o componente Malha hoje é sempre o cubo; ele passa a
+   referenciar um glTF. Dá conteúdo à aba Projeto.
+3. **Normais com escala não uniforme** — o shader usa a matriz de modelo direto,
    o que distorce a normal quando a escala não é uniforme. O certo é a
    transposta da inversa, e isso custa um uniform por instância.
-5. **Iluminação e neblina** — liga os controles do painel Cena, que hoje editam
+4. **Iluminação e neblina** — liga os controles do painel Cena, que hoje editam
    dados que ninguém lê. A luz atual é uma direção fixa no shader.
-6. **Histórico de comandos** — desfazer/refazer exige que toda mutação de cena
-   passe por comandos. Decidir antes do ECS, não depois.
-7. **ECS** — provavelmente `bevy_ecs`, não um próprio. O `rugine-scene` atual é
-   pequeno de propósito, para ser descartável.
+5. **Histórico de comandos** — desfazer/refazer. Toda mudança de componente já
+   passa pelos métodos da `Scene` (a lista dentro da `Entity` é privada), então o
+   histórico entra nesse funil. Transform, nome e visibilidade ainda são campos
+   públicos e precisam entrar nele também.
+6. **Física** — o Colisor existe e é desenhado, mas nada colide.
+
+**Componentes: armazenamento próprio, não `bevy_ecs`.** Cada entidade guarda uma
+lista de `Box<dyn Componente>`, na ordem do Inspector. O que o editor precisa —
+listar, adicionar e remover pelo nome, desenhar a UI de cada um — é acesso
+dinâmico, que o `bevy_ecs` só daria com `bevy_reflect`. Se o runtime precisar de
+milhares de entidades por quadro, o armazenamento muda por baixo da API da
+`Scene`; os componentes não.
 
 ## Licença
 

@@ -5,7 +5,8 @@ use egui_dock::DockState;
 use crate::camera::CameraEditor;
 use crate::gizmo::{Alca, Gizmo};
 use rugine_app::prelude::{Quat, Vec3};
-use rugine_scene::{EntityId, Scene};
+use rugine_scene::settings::Color;
+use rugine_scene::{Colisor, EntityId, FormaColisor, Malha, Scene};
 
 use crate::docking::{Aba, layout_padrao};
 
@@ -235,17 +236,39 @@ pub struct Arrasto {
 /// possivel ver o depth buffer separando o que esta na frente, e arrastar um
 /// pai no Inspector move os filhos junto — que e o que prova que a matriz de
 /// mundo compoe.
+///
+/// So as pecas visiveis tem Malha. `Jogador`, `Modelo`, `HUD` e `Camera` sao
+/// nos de agrupamento ou de ponto de vista, e nao devem aparecer como cubos.
 fn cena_exemplo() -> Scene {
     let mut cena = Scene::new();
 
     let sol = cena.spawn("Sol", None);
     posicionar(&mut cena, sol, Vec3::new(-3.5, 4.0, -3.0), Vec3::splat(0.6));
+    pintar(&mut cena, sol, Color::new(0.95, 0.80, 0.35));
+    cena.adicionar(
+        sol,
+        Colisor {
+            forma: FormaColisor::Esfera { raio: 0.5 },
+            centro: Vec3::ZERO,
+        },
+    );
 
     // O "sobrevivente": um boneco de caixas, montado como filho de `Modelo`,
     // que por sua vez e filho de `Jogador`. Dois niveis de profundidade de
     // proposito, para exercitar a composicao de transforms.
     let jogador = cena.spawn("Jogador", None);
     posicionar(&mut cena, jogador, Vec3::new(0.0, 0.0, 0.0), Vec3::ONE);
+    // O colisor fica no `Jogador`, que nao tem Malha: e o caso tipico de um
+    // volume de fisica envolvendo um modelo feito de varias pecas.
+    cena.adicionar(
+        jogador,
+        Colisor {
+            forma: FormaColisor::Caixa {
+                tamanho: Vec3::new(1.3, 1.85, 0.55),
+            },
+            centro: Vec3::new(0.0, 0.92, 0.0),
+        },
+    );
 
     let camera = cena.spawn("Camera", Some(jogador));
     posicionar(
@@ -272,6 +295,7 @@ fn cena_exemplo() -> Scene {
     for (indice, (posicao, escala)) in partes.into_iter().enumerate() {
         let parte = cena.spawn(format!("SobreviventeCorpo.{indice}"), Some(modelo));
         posicionar(&mut cena, parte, posicao, escala);
+        pintar(&mut cena, parte, Color::new(0.62, 0.64, 0.70));
     }
 
     let hud = cena.spawn("HUD", None);
@@ -279,6 +303,7 @@ fn cena_exemplo() -> Scene {
 
     let painel = cena.spawn("PainelStatus", Some(hud));
     posicionar(&mut cena, painel, Vec3::ZERO, Vec3::new(1.6, 0.9, 0.1));
+    pintar(&mut cena, painel, Color::new(0.30, 0.36, 0.48));
 
     let rotulo = cena.spawn("RotuloVida", Some(painel));
     posicionar(
@@ -287,6 +312,7 @@ fn cena_exemplo() -> Scene {
         Vec3::new(-0.25, 0.2, 0.6),
         Vec3::splat(0.3),
     );
+    pintar(&mut cena, rotulo, Color::new(0.85, 0.30, 0.30));
 
     let fundo = cena.spawn("FundoVida", Some(painel));
     posicionar(
@@ -295,12 +321,18 @@ fn cena_exemplo() -> Scene {
         Vec3::new(0.0, -0.2, 0.6),
         Vec3::new(0.8, 0.15, 0.2),
     );
+    pintar(&mut cena, fundo, Color::new(0.45, 0.20, 0.22));
 
     // Comeca com algo selecionado: o editor abre ja mostrando o gizmo, em
     // vez de exigir um clique para descobrir que ele existe.
     cena.select(Some(jogador));
 
     cena
+}
+
+/// Da uma Malha desta cor a entidade.
+fn pintar(cena: &mut Scene, id: EntityId, cor: Color) {
+    cena.adicionar(id, Malha { cor });
 }
 
 /// Atalho para montar a cena de exemplo sem repetir o acesso ao `Transform`.

@@ -5,10 +5,14 @@
 //! e o minimo que o editor precisa para ter algo real para listar e editar — e
 //! e pequeno o bastante para ser jogado fora quando o ECS entrar.
 
+use std::any::Any;
+
 use rugine_core::math::{Quat, Vec3};
 
+pub mod componentes;
 pub mod settings;
 
+pub use componentes::{Colisor, Componente, FormaColisor, Malha};
 pub use settings::SceneSettings;
 
 /// Identificador de uma entidade.
@@ -59,13 +63,20 @@ impl Transform {
 }
 
 /// Um no da cena.
-#[derive(Clone, Debug)]
+///
+/// Sem `Clone`: componentes sao objetos de tipo apagado, e duplicar uma
+/// entidade vai pedir um `clonar` em cada um — decisao para quando houver
+/// "Duplicar" no editor.
+#[derive(Debug)]
 pub struct Entity {
     pub name: String,
     pub transform: Transform,
     pub visible: bool,
     parent: Option<EntityId>,
     children: Vec<EntityId>,
+    /// Privado de proposito: toda mudanca passa pelos metodos da `Scene`.
+    /// E o funil por onde o desfazer/refazer vai entrar depois.
+    componentes: Vec<Box<dyn Componente>>,
 }
 
 impl Entity {
@@ -79,7 +90,7 @@ impl Entity {
 }
 
 /// Slot da arena: ou tem entidade, ou esta livre aguardando reuso.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct Slot {
     generation: u32,
     entity: Option<Entity>,
@@ -109,6 +120,7 @@ impl Scene {
             visible: true,
             parent,
             children: Vec::new(),
+            componentes: Vec::new(),
         };
 
         let id = match self.free.pop() {
@@ -259,6 +271,93 @@ impl Scene {
         };
     }
 
+    /// Pendura um componente na entidade.
+    ///
+    /// Devolve `false`, sem mudar nada, se a entidade nao existe ou ja tem um
+    /// componente do mesmo tipo.
+    pub fn adicionar<C: Componente>(&mut self, id: EntityId, componente: C) -> bool {
+        self.adicionar_box(id, Box::new(componente))
+    }
+
+    /// Como [`Self::adicionar`], para quando o tipo so e conhecido em tempo de
+    /// execucao — o menu "Adicionar componente" do editor.
+    pub fn adicionar_box(&mut self, id: EntityId, componente: Box<dyn Componente>) -> bool {
+        let Some(entidade) = self.get_mut(id) else {
+            return false;
+        };
+
+        // `type_id` pelo `dyn Any`, e nao pelo `Box`: no `Box` ele devolveria
+        // o tipo do proprio `Box`, igual para todos os componentes.
+        let tipo = (componente.as_ref() as &dyn Any).type_id();
+        if entidade
+            .componentes
+            .iter()
+            .any(|c| (c.as_ref() as &dyn Any).type_id() == tipo)
+        {
+            return false;
+        }
+
+        entidade.componentes.push(componente);
+        true
+    }
+
+    /// Tira o componente deste tipo e o devolve.
+    pub fn remover<C: Componente>(&mut self, id: EntityId) -> Option<C> {
+        let entidade = self.get_mut(id)?;
+        let indice = entidade
+            .componentes
+            .iter()
+            .position(|c| (c.as_ref() as &dyn Any).is::<C>())?;
+
+        let removido: Box<dyn Any> = entidade.componentes.remove(indice);
+        removido.downcast::<C>().ok().map(|c| *c)
+    }
+
+    /// Tira o componente desta posicao da lista, sem conhecer o tipo.
+    pub fn remover_indice(&mut self, id: EntityId, indice: usize) -> Option<Box<dyn Componente>> {
+        let entidade = self.get_mut(id)?;
+        (indice < entidade.componentes.len()).then(|| entidade.componentes.remove(indice))
+    }
+
+    pub fn componente<C: Componente>(&self, id: EntityId) -> Option<&C> {
+        self.get(id)?
+            .componentes
+            .iter()
+            .find_map(|c| (c.as_ref() as &dyn Any).downcast_ref::<C>())
+    }
+
+    pub fn componente_mut<C: Componente>(&mut self, id: EntityId) -> Option<&mut C> {
+        self.get_mut(id)?
+            .componentes
+            .iter_mut()
+            .find_map(|c| (c.as_mut() as &mut dyn Any).downcast_mut::<C>())
+    }
+
+    pub fn tem<C: Componente>(&self, id: EntityId) -> bool {
+        self.componente::<C>(id).is_some()
+    }
+
+    /// Os componentes da entidade, na ordem em que foram adicionados.
+    ///
+    /// Vazio para um id morto: quem lista componentes nao precisa tratar esse
+    /// caso a parte.
+    pub fn componentes(&self, id: EntityId) -> &[Box<dyn Componente>] {
+        self.get(id).map_or(&[], |e| &e.componentes)
+    }
+
+    pub fn componentes_mut(&mut self, id: EntityId) -> &mut [Box<dyn Componente>] {
+        match self.get_mut(id) {
+            Some(entidade) => &mut entidade.componentes,
+            None => &mut [],
+        }
+    }
+
+    /// Toda entidade viva com um componente deste tipo.
+    pub fn com<C: Componente>(&self) -> impl Iterator<Item = (EntityId, &C)> + '_ {
+        self.entidades()
+            .filter_map(|id| self.componente::<C>(id).map(|c| (id, c)))
+    }
+
     /// Matriz de mundo, compondo a cadeia de pais ate a raiz.
     pub fn world_matrix(&self, id: EntityId) -> rugine_core::math::Mat4 {
         let mut matrix = rugine_core::math::Mat4::IDENTITY;
@@ -342,5 +441,90 @@ mod tests {
             (posicao - Vec3::new(10.0, 5.0, 0.0)).length() < 1e-5,
             "deu {posicao}"
         );
+    }
+
+    #[test]
+    fn adicionar_e_ler_componente() {
+        let mut scene = Scene::new();
+        let id = scene.spawn("Caixa", None);
+
+        assert!(!scene.tem::<Malha>(id));
+        assert!(scene.adicionar(id, Malha::default()));
+        assert!(scene.tem::<Malha>(id));
+        assert!(!scene.tem::<Colisor>(id), "so a Malha foi adicionada");
+
+        scene.componente_mut::<Malha>(id).unwrap().cor = settings::Color::new(1.0, 0.0, 0.0);
+        assert_eq!(scene.componente::<Malha>(id).unwrap().cor.r, 1.0);
+    }
+
+    /// Um de cada tipo por entidade: o segundo e recusado e o primeiro fica.
+    #[test]
+    fn nao_aceita_dois_do_mesmo_tipo() {
+        let mut scene = Scene::new();
+        let id = scene.spawn("Caixa", None);
+        let vermelha = Malha {
+            cor: settings::Color::new(1.0, 0.0, 0.0),
+        };
+
+        assert!(scene.adicionar(id, vermelha));
+        assert!(!scene.adicionar(id, Malha::default()));
+        assert!(
+            scene.adicionar(id, Colisor::default()),
+            "tipo diferente entra"
+        );
+
+        assert_eq!(scene.componentes(id).len(), 2);
+        assert_eq!(scene.componente::<Malha>(id), Some(&vermelha));
+    }
+
+    /// A ordem de adicao e a ordem do Inspector, e remover por indice tira o
+    /// componente certo sem que o chamador conheca o tipo.
+    #[test]
+    fn ordem_e_remocao() {
+        let mut scene = Scene::new();
+        let id = scene.spawn("Caixa", None);
+        scene.adicionar(id, Colisor::default());
+        scene.adicionar(id, Malha::default());
+
+        let nomes: Vec<_> = scene.componentes(id).iter().map(|c| c.nome()).collect();
+        assert_eq!(nomes, ["Colisor", "Malha"]);
+
+        let removido = scene.remover_indice(id, 0).unwrap();
+        assert_eq!(removido.nome(), "Colisor");
+        assert!(scene.remover_indice(id, 5).is_none());
+
+        assert_eq!(scene.remover::<Malha>(id), Some(Malha::default()));
+        assert!(scene.componentes(id).is_empty());
+    }
+
+    /// Componentes morrem com a entidade, e um id antigo nao enxerga os da
+    /// entidade nova que reusou o slot.
+    #[test]
+    fn componentes_nao_vazam_para_o_slot_reusado() {
+        let mut scene = Scene::new();
+        let antiga = scene.spawn("Antiga", None);
+        scene.adicionar(antiga, Malha::default());
+        scene.despawn(antiga);
+
+        let nova = scene.spawn("Nova", None);
+        assert!(scene.componentes(nova).is_empty());
+        assert!(scene.componentes(antiga).is_empty());
+        assert!(
+            !scene.adicionar(antiga, Malha::default()),
+            "id morto nao aceita"
+        );
+    }
+
+    #[test]
+    fn com_lista_so_quem_tem_o_componente() {
+        let mut scene = Scene::new();
+        let a = scene.spawn("A", None);
+        let _b = scene.spawn("B", None);
+        let c = scene.spawn("C", None);
+        scene.adicionar(a, Malha::default());
+        scene.adicionar(c, Malha::default());
+
+        let ids: Vec<_> = scene.com::<Malha>().map(|(id, _)| id).collect();
+        assert_eq!(ids, [a, c]);
     }
 }
