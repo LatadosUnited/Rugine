@@ -3,7 +3,7 @@
 use egui_dock::DockState;
 
 use crate::camera::CameraEditor;
-use crate::gizmo::Eixo;
+use crate::gizmo::{Alca, Gizmo};
 use rugine_app::prelude::{Quat, Vec3};
 use rugine_scene::{EntityId, Scene};
 
@@ -135,7 +135,7 @@ pub struct Editor {
     pub camera: CameraEditor,
 
     /// Alca do gizmo sob o mouse, para destaque.
-    pub alca_sob_mouse: Option<Eixo>,
+    pub alca_sob_mouse: Option<Alca>,
 
     /// Arrasto de alca em andamento.
     pub arrasto: Option<Arrasto>,
@@ -191,10 +191,27 @@ impl Default for Editor {
 /// sempre o deslocamento total em relacao ao agarre evita o acumulo de
 /// arredondamento que faria o objeto escorregar durante o arrasto.
 pub struct Arrasto {
-    pub eixo: Eixo,
+    pub alca: Alca,
+    /// O gizmo como estava ao agarrar, e nao o do quadro atual.
+    ///
+    /// O agarre e o angulo inicial foram medidos contra esta origem e estes
+    /// eixos. Recalcular o gizmo a cada quadro mede contra uma origem que ja
+    /// andou junto com o objeto: o deslocamento lido cai para perto de zero,
+    /// o objeto volta, no quadro seguinte avanca de novo — e fica piscando
+    /// entre dois lugares. Na rotacao em modo Local acontece o mesmo com a
+    /// base do anel, que gira junto com o objeto.
+    pub gizmo: Gizmo,
     /// Posicao ao longo do eixo onde o arrasto comecou. So para mover e
     /// escalar.
     pub agarre: f32,
+    /// Onde o ponteiro estava ao agarrar, em pixels do viewport. So para o
+    /// centro da escala, que mede o arrasto na tela e nao num eixo.
+    pub ponto_inicial: (f32, f32),
+    /// Quantos pixels o comprimento do gizmo ocupa na tela, ao agarrar.
+    ///
+    /// E a regua do arrasto do centro: arrastar o tamanho de uma haste dobra
+    /// a escala, perto ou longe da camera, em qualquer resolucao.
+    pub pixels_por_comprimento: f32,
     pub translacao_inicial: Vec3,
     pub escala_inicial: Vec3,
     pub rotacao_inicial: Quat,

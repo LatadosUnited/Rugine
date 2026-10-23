@@ -61,6 +61,10 @@ impl Instancia {
         }
     }
 
+    pub fn modelo(&self) -> Mat4 {
+        Mat4::from_cols_array_2d(&self.modelo)
+    }
+
     /// Uma `mat4x4` nao cabe num atributo de vertice: ela entra como quatro
     /// `vec4` em locations consecutivas, e o shader remonta. Por isso as
     /// locations 2 a 5 — 0 e 1 sao do vertice.

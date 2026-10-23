@@ -62,7 +62,27 @@ impl Eixo {
     }
 }
 
+/// Uma parte agarravel do gizmo.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Alca {
+    /// A haste ou o anel de um eixo.
+    Eixo(Eixo),
+    /// O cubo do meio, que no gizmo de escala escala os tres eixos juntos.
+    Centro,
+}
+
+impl Alca {
+    /// O eixo da alca, se ela tem um.
+    pub fn eixo(self) -> Option<Eixo> {
+        match self {
+            Self::Eixo(eixo) => Some(eixo),
+            Self::Centro => None,
+        }
+    }
+}
+
 /// O gizmo de um frame.
+#[derive(Clone, Copy)]
 pub struct Gizmo {
     /// Onde ele esta, em coordenadas de mundo.
     pub origem: Vec3,
@@ -74,7 +94,7 @@ pub struct Gizmo {
     pub comprimento: f32,
     pub ferramenta: Ferramenta,
     /// Alca sob o mouse ou sendo arrastada.
-    pub destacado: Option<Eixo>,
+    pub destacado: Option<Alca>,
 }
 
 impl Gizmo {
@@ -106,7 +126,7 @@ impl Gizmo {
         orientacao: Quat,
         posicao_camera: Vec3,
         ferramenta: Ferramenta,
-        destacado: Option<Eixo>,
+        destacado: Option<Alca>,
     ) -> Self {
         let distancia = (origem - posicao_camera).length().max(0.001);
 
@@ -185,6 +205,48 @@ impl Gizmo {
         })
     }
 
+    /// Se a ferramenta tem o cubo central agarravel.
+    ///
+    /// So a escala: no mover, arrastar o centro precisaria de um plano para
+    /// deslizar, e no girar de uma rotacao livre — gestos que nao existem
+    /// ainda.
+    pub fn tem_centro(ferramenta: Ferramenta) -> bool {
+        ferramenta == Ferramenta::Escalar
+    }
+
+    /// Matriz do cubo central, para desenho e para picking.
+    ///
+    /// Quando agarravel ele cresce: o marcador de 7% do comprimento basta
+    /// para ver a origem, mas e pequeno demais para mirar.
+    pub fn centro(&self) -> Mat4 {
+        let lado = if Self::tem_centro(self.ferramenta) {
+            0.2
+        } else {
+            0.07
+        };
+        Mat4::from_scale_rotation_translation(
+            Vec3::splat(self.comprimento * lado),
+            self.orientacao,
+            self.origem,
+        )
+    }
+
+    fn cor_centro(&self) -> [f32; 4] {
+        if self.destacado == Some(Alca::Centro) {
+            [1.0, 0.92, 0.35, 1.0]
+        } else {
+            [0.9, 0.9, 0.92, 1.0]
+        }
+    }
+
+    fn cor_eixo(&self, eixo: Eixo) -> [f32; 4] {
+        if self.destacado == Some(Alca::Eixo(eixo)) {
+            eixo.cor_destacada()
+        } else {
+            eixo.cor()
+        }
+    }
+
     /// Instancias para desenhar.
     pub fn instancias(&self) -> Vec<Instancia> {
         if Self::usa_aneis(self.ferramenta) {
@@ -194,11 +256,7 @@ impl Gizmo {
         let mut saida = Vec::with_capacity(7);
 
         for (eixo, modelo) in self.alcas() {
-            let cor = if self.destacado == Some(eixo) {
-                eixo.cor_destacada()
-            } else {
-                eixo.cor()
-            };
+            let cor = self.cor_eixo(eixo);
             saida.push(Instancia::new(modelo, cor));
 
             // Ponta: cubo em Escalar, bloco menor em Mover. A forma da ponta
@@ -209,27 +267,22 @@ impl Gizmo {
                 } else {
                     0.12
                 };
-            let centro_ponta = self.origem + eixo.direcao() * self.comprimento;
+            // `eixo_mundo`, e nao `direcao`: com o gizmo girado (sempre, na
+            // escala de um objeto girado) a ponta tem que acompanhar a haste.
+            let centro_ponta = self.origem + self.eixo_mundo(eixo) * self.comprimento;
             saida.push(Instancia::new(
                 Mat4::from_scale_rotation_translation(
                     Vec3::splat(ponta),
-                    Quat::IDENTITY,
+                    self.orientacao,
                     centro_ponta,
                 ),
                 cor,
             ));
         }
 
-        // Cubo central branco: marca a origem do gizmo e ajuda a ver que ele
-        // esta sobre a entidade certa.
-        saida.push(Instancia::new(
-            Mat4::from_scale_rotation_translation(
-                Vec3::splat(self.comprimento * 0.07),
-                Quat::IDENTITY,
-                self.origem,
-            ),
-            [0.9, 0.9, 0.92, 1.0],
-        ));
+        // Cubo central: marca a origem do gizmo e ajuda a ver que ele esta
+        // sobre a entidade certa. Na escala, e tambem a alca dos tres eixos.
+        saida.push(Instancia::new(self.centro(), self.cor_centro()));
 
         saida
     }
@@ -251,11 +304,7 @@ impl Gizmo {
         let espessura = self.comprimento * Self::ESPESSURA_ANEL;
 
         for eixo in Eixo::TODOS {
-            let cor = if self.destacado == Some(eixo) {
-                eixo.cor_destacada()
-            } else {
-                eixo.cor()
-            };
+            let cor = self.cor_eixo(eixo);
 
             for passo in 0..Self::SEGMENTOS {
                 let a = passo as f32 / Self::SEGMENTOS as f32 * std::f32::consts::TAU;
@@ -284,14 +333,7 @@ impl Gizmo {
             }
         }
 
-        saida.push(Instancia::new(
-            Mat4::from_scale_rotation_translation(
-                Vec3::splat(self.comprimento * 0.07),
-                Quat::IDENTITY,
-                self.origem,
-            ),
-            [0.9, 0.9, 0.92, 1.0],
-        ));
+        saida.push(Instancia::new(self.centro(), self.cor_centro()));
 
         saida
     }
@@ -491,5 +533,45 @@ mod tests {
     #[test]
     fn mover_gera_instancias() {
         assert_eq!(gizmo().instancias().len(), 7);
+    }
+
+    fn gizmo_escala(orientacao: Quat) -> Gizmo {
+        Gizmo::new(
+            Vec3::ZERO,
+            orientacao,
+            Vec3::new(0.0, 0.0, 10.0),
+            Ferramenta::Escalar,
+            None,
+        )
+    }
+
+    /// Com o objeto girado, cada ponta tem que ficar no fim da sua haste, e
+    /// nao no eixo do mundo.
+    #[test]
+    fn pontas_acompanham_a_orientacao() {
+        let gizmo = gizmo_escala(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2));
+        let instancias = gizmo.instancias();
+
+        for (i, eixo) in Eixo::TODOS.into_iter().enumerate() {
+            // Pares haste/ponta, na ordem dos eixos.
+            let ponta = instancias[i * 2 + 1].modelo();
+            let centro = ponta.transform_point3(Vec3::ZERO);
+            let esperado = gizmo.eixo_mundo(eixo) * gizmo.comprimento;
+            assert!(
+                (centro - esperado).length() < 1e-4,
+                "ponta de {eixo:?} em {centro}, esperado {esperado}"
+            );
+        }
+    }
+
+    /// So a escala tem centro agarravel, e ele e maior que o marcador.
+    #[test]
+    fn centro_agarravel_so_na_escala() {
+        assert!(Gizmo::tem_centro(Ferramenta::Escalar));
+        assert!(!Gizmo::tem_centro(Ferramenta::Mover));
+        assert!(!Gizmo::tem_centro(Ferramenta::Rotacionar));
+
+        let lado = |g: &Gizmo| g.centro().to_scale_rotation_translation().0.x;
+        assert!(lado(&gizmo_escala(Quat::IDENTITY)) > lado(&gizmo()) * 2.0);
     }
 }

@@ -1,10 +1,10 @@
 //! Clique e arrasto no viewport: selecao e manipulacao pelo gizmo.
 
-use rugine_app::prelude::{Mat4, Quat, Raio, Vec3, egui};
+use rugine_app::prelude::{Mat4, Quat, Raio, Vec3, Vec4, egui};
 use rugine_scene::EntityId;
 
 use crate::estado::{Arrasto, Editor, Espaco, Ferramenta};
-use crate::gizmo::{Eixo, Gizmo};
+use crate::gizmo::{Alca, Eixo, Gizmo};
 use crate::picking;
 
 /// Trata clique e arrasto do botao esquerdo dentro do viewport.
@@ -28,7 +28,7 @@ pub fn tratar(editor: &mut Editor, resposta: &egui::Response, rect: egui::Rect, 
     // Qual alca esta sob o mouse, para destacar antes de clicar. Durante um
     // arrasto o destaque fica preso na alca agarrada.
     editor.alca_sob_mouse = match (&gizmo, resposta.hover_pos()) {
-        _ if editor.arrasto.is_some() => editor.arrasto.as_ref().map(|a| a.eixo),
+        _ if editor.arrasto.is_some() => editor.arrasto.as_ref().map(|a| a.alca),
         (Some(gizmo), Some(pos)) => alca_sob(gizmo, view_proj, ponto(pos), tamanho),
         _ => None,
     };
@@ -62,9 +62,9 @@ fn alca_sob(
     view_proj: Mat4,
     ponto: (f32, f32),
     tamanho: (f32, f32),
-) -> Option<Eixo> {
+) -> Option<Alca> {
     if Gizmo::usa_aneis(gizmo.ferramenta) {
-        anel_sob(gizmo, view_proj, ponto, tamanho)
+        anel_sob(gizmo, view_proj, ponto, tamanho).map(Alca::Eixo)
     } else {
         picking::alca_sob(gizmo, view_proj, ponto, tamanho)
     }
@@ -128,6 +128,38 @@ fn angulo_no_anel(
     Some(deslocamento.dot(v).atan2(deslocamento.dot(u)))
 }
 
+/// Onde um ponto do mundo cai na tela, em pixels do viewport.
+///
+/// O inverso de `Raio::da_tela`.
+fn na_tela(view_proj: Mat4, p: Vec3, tamanho: (f32, f32)) -> (f32, f32) {
+    let clip = view_proj * Vec4::new(p.x, p.y, p.z, 1.0);
+    let ndc = clip.truncate() / clip.w;
+    (
+        (ndc.x + 1.0) * 0.5 * tamanho.0,
+        (1.0 - ndc.y) * 0.5 * tamanho.1,
+    )
+}
+
+/// Quantos pixels o comprimento do gizmo ocupa na tela.
+fn pixels_por_comprimento(
+    gizmo: &Gizmo,
+    posicao_camera: Vec3,
+    view_proj: Mat4,
+    tamanho: (f32, f32),
+) -> f32 {
+    // Um vetor qualquer perpendicular a visada: de frente para a camera, todo
+    // vetor nesse plano projeta com o mesmo tamanho. Um eixo do gizmo nao
+    // serviria, porque pode estar apontado para a camera e medir zero.
+    let lado = (gizmo.origem - posicao_camera)
+        .normalize_or_zero()
+        .any_orthonormal_vector();
+    let a = na_tela(view_proj, gizmo.origem, tamanho);
+    let b = na_tela(view_proj, gizmo.origem + lado * gizmo.comprimento, tamanho);
+
+    // Piso de um pixel: dividir pelo resultado nao pode explodir.
+    (b.0 - a.0).hypot(b.1 - a.1).max(1.0)
+}
+
 /// O gizmo do frame, se ha selecao e a ferramenta o desenha.
 pub fn gizmo_atual(editor: &Editor) -> Option<Gizmo> {
     if !Gizmo::visivel(editor.ferramenta) {
@@ -174,7 +206,7 @@ fn iniciar(
     let Some(gizmo) = gizmo else {
         return;
     };
-    let Some(eixo) = alca_sob(gizmo, view_proj, ponto, tamanho) else {
+    let Some(alca) = alca_sob(gizmo, view_proj, ponto, tamanho) else {
         return;
     };
     let Some(id) = editor.cena.selected() else {
@@ -186,25 +218,39 @@ fn iniciar(
 
     let transform = entidade.transform;
 
-    let (agarre, angulo_agarre) = if Gizmo::usa_aneis(gizmo.ferramenta) {
-        let Some(angulo) = angulo_no_anel(gizmo, eixo, view_proj, ponto, tamanho) else {
-            return;
-        };
-        (0.0, angulo)
-    } else {
-        let raio = Raio::da_tela(view_proj, ponto, tamanho);
-        let Some(t) = picking::ponto_no_eixo(&raio, gizmo.origem, gizmo.eixo_mundo(eixo)) else {
-            return;
-        };
-        (t, 0.0)
+    let (agarre, angulo_agarre) = match alca {
+        // O centro mede o arrasto na tela, a partir de `ponto_inicial`.
+        Alca::Centro => (0.0, 0.0),
+        Alca::Eixo(eixo) if Gizmo::usa_aneis(gizmo.ferramenta) => {
+            let Some(angulo) = angulo_no_anel(gizmo, eixo, view_proj, ponto, tamanho) else {
+                return;
+            };
+            (0.0, angulo)
+        }
+        Alca::Eixo(eixo) => {
+            let raio = Raio::da_tela(view_proj, ponto, tamanho);
+            let Some(t) = picking::ponto_no_eixo(&raio, gizmo.origem, gizmo.eixo_mundo(eixo))
+            else {
+                return;
+            };
+            (t, 0.0)
+        }
     };
 
     // Guardamos o estado do inicio do gesto e aplicamos sempre o
     // deslocamento total. Acumular diferenca quadro a quadro faria o objeto
     // escorregar: cada quadro arredonda, e o erro soma.
     editor.arrasto = Some(Arrasto {
-        eixo,
+        alca,
+        gizmo: *gizmo,
         agarre,
+        ponto_inicial: ponto,
+        pixels_por_comprimento: pixels_por_comprimento(
+            gizmo,
+            editor.camera.posicao(),
+            view_proj,
+            tamanho,
+        ),
         translacao_inicial: transform.translation,
         escala_inicial: transform.scale,
         rotacao_inicial: transform.rotation,
@@ -214,10 +260,7 @@ fn iniciar(
 }
 
 fn continuar(editor: &mut Editor, view_proj: Mat4, ponto: (f32, f32), tamanho: (f32, f32)) {
-    if editor.arrasto.is_none() {
-        return;
-    }
-    let Some(gizmo) = gizmo_atual(editor) else {
+    let Some(gizmo) = editor.arrasto.as_ref().map(|a| a.gizmo) else {
         return;
     };
     let Some(id) = editor.cena.selected() else {
@@ -251,7 +294,10 @@ fn rotacionar(
     let Some(arrasto) = editor.arrasto.as_mut() else {
         return;
     };
-    let Some(angulo) = angulo_no_anel(gizmo, arrasto.eixo, view_proj, ponto, tamanho) else {
+    let Some(eixo_anel) = arrasto.alca.eixo() else {
+        return;
+    };
+    let Some(angulo) = angulo_no_anel(gizmo, eixo_anel, view_proj, ponto, tamanho) else {
         return;
     };
 
@@ -274,7 +320,7 @@ fn rotacionar(
         total = (total / degrau).round() * degrau;
     }
 
-    let eixo = gizmo.eixo_mundo(arrasto.eixo);
+    let eixo = gizmo.eixo_mundo(eixo_anel);
     let rotacao_inicial = arrasto.rotacao_inicial;
 
     let Some(entidade) = editor.cena.get_mut(id) else {
@@ -304,9 +350,16 @@ fn mover_ou_escalar(
     let Some(arrasto) = editor.arrasto.as_ref() else {
         return;
     };
+    let eixo = match arrasto.alca {
+        Alca::Eixo(eixo) => eixo,
+        Alca::Centro => {
+            escalar_uniforme(editor, id, ponto);
+            return;
+        }
+    };
 
     let raio = Raio::da_tela(view_proj, ponto, tamanho);
-    let direcao = gizmo.eixo_mundo(arrasto.eixo);
+    let direcao = gizmo.eixo_mundo(eixo);
 
     let Some(t) = picking::ponto_no_eixo(&raio, gizmo.origem, direcao) else {
         return;
@@ -317,7 +370,6 @@ fn mover_ou_escalar(
         deslocamento = (deslocamento / passo_snap).round() * passo_snap;
     }
 
-    let eixo = arrasto.eixo;
     let translacao_inicial = arrasto.translacao_inicial;
     let escala_inicial = arrasto.escala_inicial;
 
@@ -343,5 +395,190 @@ fn mover_ou_escalar(
             entidade.transform.scale = Vec3::from_array(escala);
         }
         _ => {}
+    }
+}
+
+/// Escala os tres eixos juntos, pelo arrasto do centro.
+///
+/// Medido em pixels na tela, e nao ao longo de um eixo do mundo: o centro nao
+/// tem direcao, e qualquer eixo escolhido ficaria de ponta para a camera em
+/// algum angulo. Para a direita ou para cima aumenta, como na Unity, e
+/// arrastar o tamanho de uma haste dobra a escala.
+fn escalar_uniforme(editor: &mut Editor, id: EntityId, ponto: (f32, f32)) {
+    let snap = editor.snap;
+    let passo_snap = editor.tamanho_snap;
+
+    let Some(arrasto) = editor.arrasto.as_ref() else {
+        return;
+    };
+
+    // O `y` da tela cresce para baixo, entao subir e `-dy`.
+    let dx = ponto.0 - arrasto.ponto_inicial.0;
+    let dy = ponto.1 - arrasto.ponto_inicial.1;
+    let mut aumento = (dx - dy) / arrasto.pixels_por_comprimento;
+    if snap {
+        aumento = (aumento / passo_snap).round() * passo_snap;
+    }
+
+    // Multiplicar, e nao somar a cada eixo: um objeto com escala (1, 3, 1)
+    // continua tres vezes mais alto que largo. Somar o mesmo valor aos tres
+    // mudaria a proporcao dele.
+    let fator = (1.0 + aumento).max(0.01);
+    let escala = (arrasto.escala_inicial * fator).max(Vec3::splat(0.01));
+
+    if let Some(entidade) = editor.cena.get_mut(id) {
+        entidade.transform.scale = escala;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TAMANHO: (f32, f32) = (800.0, 600.0);
+
+    fn editor_com_selecao(ferramenta: Ferramenta, espaco: Espaco) -> (Editor, EntityId, Mat4) {
+        let mut editor = Editor::default();
+        let id = editor.cena.roots()[0];
+        editor.cena.select(Some(id));
+        editor.ferramenta = ferramenta;
+        editor.espaco = espaco;
+        let view_proj = editor.camera.view_proj(TAMANHO.0 / TAMANHO.1);
+        (editor, id, view_proj)
+    }
+
+    /// O mouse parado num ponto tem que deixar o objeto parado. Antes, o
+    /// deslocamento era medido contra a origem do quadro atual, que ja tinha
+    /// andado com o objeto, e ele alternava entre dois lugares.
+    #[test]
+    fn mover_com_mouse_parado_nao_pisca() {
+        let (mut editor, id, view_proj) = editor_com_selecao(Ferramenta::Mover, Espaco::Global);
+        let gizmo = gizmo_atual(&editor).unwrap();
+        let inicial = editor.cena.get(id).unwrap().transform.translation;
+
+        let agarre = gizmo.origem + Vec3::X * (gizmo.comprimento * 0.5);
+        iniciar(
+            &mut editor,
+            &Some(gizmo),
+            view_proj,
+            na_tela(view_proj, agarre, TAMANHO),
+            TAMANHO,
+        );
+        assert_eq!(
+            editor.arrasto.as_ref().map(|a| a.alca),
+            Some(Alca::Eixo(Eixo::X))
+        );
+
+        let destino = na_tela(view_proj, agarre + Vec3::X, TAMANHO);
+        let mut posicoes = Vec::new();
+        for _ in 0..4 {
+            continuar(&mut editor, view_proj, destino, TAMANHO);
+            posicoes.push(editor.cena.get(id).unwrap().transform.translation);
+        }
+
+        for p in &posicoes {
+            assert!((*p - (inicial + Vec3::X)).length() < 1e-3, "{posicoes:?}");
+        }
+    }
+
+    /// O mesmo para a rotacao em modo Local, onde a base do anel gira junto
+    /// com o objeto.
+    #[test]
+    fn rotacionar_local_com_mouse_parado_nao_pisca() {
+        let (mut editor, id, view_proj) = editor_com_selecao(Ferramenta::Rotacionar, Espaco::Local);
+        let gizmo = gizmo_atual(&editor).unwrap();
+        let (u, v) = gizmo.base_mundo(Eixo::X);
+        let r = gizmo.raio_anel();
+
+        let no_anel = |graus: f32| {
+            let a = graus.to_radians();
+            na_tela(
+                view_proj,
+                gizmo.origem + (u * a.cos() + v * a.sin()) * r,
+                TAMANHO,
+            )
+        };
+
+        // 45 graus, e nao 0: em 0 o ponto `u * r` fica tambem sobre o anel
+        // vizinho, onde os dois se cruzam, e o clique pode pegar o outro.
+        iniciar(&mut editor, &Some(gizmo), view_proj, no_anel(45.0), TAMANHO);
+        assert_eq!(
+            editor.arrasto.as_ref().map(|a| a.alca),
+            Some(Alca::Eixo(Eixo::X))
+        );
+
+        let angulo = 30f32.to_radians();
+        let destino = no_anel(75.0);
+
+        let mut rotacoes = Vec::new();
+        for _ in 0..4 {
+            continuar(&mut editor, view_proj, destino, TAMANHO);
+            rotacoes.push(editor.cena.get(id).unwrap().transform.rotation);
+        }
+
+        for q in &rotacoes {
+            assert!(q.angle_between(rotacoes[0]) < 1e-3, "{rotacoes:?}");
+        }
+        let girado = rotacoes[0].angle_between(gizmo.orientacao);
+        assert!(
+            (girado - angulo).abs() < 1e-2,
+            "girou {} graus",
+            girado.to_degrees()
+        );
+    }
+
+    /// Arrastar o centro escala os tres eixos pelo mesmo fator, mantendo a
+    /// proporcao, e o mouse parado deixa a escala parada.
+    #[test]
+    fn centro_escala_os_tres_eixos() {
+        let (mut editor, id, view_proj) = editor_com_selecao(Ferramenta::Escalar, Espaco::Local);
+        editor.cena.get_mut(id).unwrap().transform.scale = Vec3::new(1.0, 3.0, 2.0);
+        let gizmo = gizmo_atual(&editor).unwrap();
+
+        let meio = na_tela(view_proj, gizmo.origem, TAMANHO);
+        iniciar(&mut editor, &Some(gizmo), view_proj, meio, TAMANHO);
+        assert_eq!(editor.arrasto.as_ref().map(|a| a.alca), Some(Alca::Centro));
+
+        // Meia haste para a direita: fator 1,5.
+        let regua = editor.arrasto.as_ref().unwrap().pixels_por_comprimento;
+        let destino = (meio.0 + regua * 0.5, meio.1);
+
+        for _ in 0..4 {
+            continuar(&mut editor, view_proj, destino, TAMANHO);
+            let escala = editor.cena.get(id).unwrap().transform.scale;
+            assert!(
+                (escala - Vec3::new(1.5, 4.5, 3.0)).length() < 1e-3,
+                "escala {escala}"
+            );
+        }
+
+        // Para a esquerda do ponto de partida, encolhe.
+        continuar(
+            &mut editor,
+            view_proj,
+            (meio.0 - regua * 0.5, meio.1),
+            TAMANHO,
+        );
+        let escala = editor.cena.get(id).unwrap().transform.scale;
+        assert!(
+            (escala - Vec3::new(0.5, 1.5, 1.0)).length() < 1e-3,
+            "escala {escala}"
+        );
+    }
+
+    /// Com o centro agarravel, a haste continua pegando o seu eixo.
+    #[test]
+    fn haste_da_escala_ainda_pega_o_eixo() {
+        let (mut editor, _, view_proj) = editor_com_selecao(Ferramenta::Escalar, Espaco::Local);
+        let gizmo = gizmo_atual(&editor).unwrap();
+
+        let na_haste = gizmo.origem + gizmo.eixo_mundo(Eixo::Y) * (gizmo.comprimento * 0.6);
+        let ponto = na_tela(view_proj, na_haste, TAMANHO);
+        iniciar(&mut editor, &Some(gizmo), view_proj, ponto, TAMANHO);
+
+        assert_eq!(
+            editor.arrasto.as_ref().map(|a| a.alca),
+            Some(Alca::Eixo(Eixo::Y))
+        );
     }
 }

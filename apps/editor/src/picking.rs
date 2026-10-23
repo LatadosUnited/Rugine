@@ -9,6 +9,8 @@
 use rugine_app::prelude::{Mat4, Raio, Vec3};
 use rugine_scene::{EntityId, Scene};
 
+use crate::gizmo::{Alca, Eixo, Gizmo};
+
 /// O que o raio acertou.
 pub struct Acerto {
     pub entidade: EntityId,
@@ -64,14 +66,23 @@ fn mais_proxima(cena: &Scene, raio: &Raio) -> Option<Acerto> {
 /// tem que capturar o clique antes, senao clicar numa alca sobre um objeto
 /// selecionaria o objeto.
 pub fn alca_sob(
-    gizmo: &crate::gizmo::Gizmo,
+    gizmo: &Gizmo,
     view_proj: Mat4,
     ponto: (f32, f32),
     tamanho: (f32, f32),
-) -> Option<crate::gizmo::Eixo> {
+) -> Option<Alca> {
     let raio = Raio::da_tela(view_proj, ponto, tamanho);
 
-    let mut melhor: Option<(f32, crate::gizmo::Eixo)> = None;
+    // O centro vence sempre que e atingido, mesmo com uma haste mais perto.
+    // O gizmo e desenhado sem teste de profundidade, na ordem das instancias,
+    // e o centro vem por ultimo: na tela ele fica por cima de tudo. Pela
+    // distancia, uma haste apontada para a camera tem a ponta na frente do
+    // cubo e roubaria o clique no meio dele.
+    if Gizmo::tem_centro(gizmo.ferramenta) && raio.intersecta_caixa(gizmo.centro()).is_some() {
+        return Some(Alca::Centro);
+    }
+
+    let mut melhor: Option<(f32, Eixo)> = None;
 
     for (eixo, modelo) in gizmo.alcas() {
         let Some(t) = raio.intersecta_caixa(modelo) else {
@@ -82,7 +93,7 @@ pub fn alca_sob(
         }
     }
 
-    melhor.map(|(_, eixo)| eixo)
+    melhor.map(|(_, eixo)| Alca::Eixo(eixo))
 }
 
 /// Ponto do eixo mais proximo do raio, para arrastar uma alca.
