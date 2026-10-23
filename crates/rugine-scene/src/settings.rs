@@ -6,9 +6,10 @@
 //! seja uma mudanca local quando o pipeline de iluminacao existir.
 
 use rugine_core::math::Vec3;
+use serde::{Deserialize, Serialize};
 
 /// Como o fundo da cena e preenchido.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum SkyKind {
     /// Cor chapada.
     #[default]
@@ -32,7 +33,7 @@ impl SkyKind {
 }
 
 /// Cor RGB linear, 0.0..1.0 por canal.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Color {
     pub r: f32,
     pub g: f32,
@@ -63,7 +64,8 @@ impl Color {
 }
 
 /// Ceu e luz vinda dele.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Sky {
     pub kind: SkyKind,
     pub color: Color,
@@ -85,7 +87,8 @@ impl Default for Sky {
 }
 
 /// Neblina e luz ambiente.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Ambient {
     /// Densidade da neblina. Valores pequenos: isto e exponencial, nao linear.
     pub fog_density: f32,
@@ -105,7 +108,8 @@ impl Default for Ambient {
 }
 
 /// Pos-processamento.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PostProcessing {
     pub bloom: bool,
     pub bloom_intensity: f32,
@@ -125,7 +129,8 @@ impl Default for PostProcessing {
 }
 
 /// Tudo que o painel "Cena" edita.
-#[derive(Copy, Clone, Debug, PartialEq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SceneSettings {
     pub sky: Sky,
     pub ambient: Ambient,

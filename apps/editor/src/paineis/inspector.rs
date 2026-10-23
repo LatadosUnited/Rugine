@@ -172,15 +172,16 @@ fn lista_de_componentes(ui: &mut egui::Ui, editor: &mut Editor, id: EntityId) {
 /// O botao que lista os componentes que esta entidade ainda nao tem.
 fn menu_adicionar(ui: &mut egui::Ui, editor: &mut Editor, id: EntityId) {
     ui.menu_button("+ Adicionar componente", |ui| {
-        for tipo in &componentes::ADICIONAVEIS {
-            let nome = tipo.nome();
-
+        let nomes: Vec<_> = editor.registro.nomes().collect();
+        for nome in nomes {
             // Desabilitado em vez de escondido: o item some do lugar de
             // sempre e confunde mais do que um item cinza.
             let ja_tem = editor.cena.componentes(id).iter().any(|c| c.nome() == nome);
 
             if ui.add_enabled(!ja_tem, egui::Button::new(nome)).clicked() {
-                editor.cena.adicionar_box(id, (tipo.criar)());
+                if let Some(novo) = editor.registro.criar(nome) {
+                    editor.cena.adicionar_box(id, novo);
+                }
                 ui.close();
             }
         }

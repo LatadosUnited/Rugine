@@ -9,9 +9,11 @@ use std::any::Any;
 
 use rugine_core::math::{Quat, Vec3};
 
+pub mod arquivo;
 pub mod componentes;
 pub mod settings;
 
+pub use arquivo::{Carregada, ErroArquivo, Registro};
 pub use componentes::{Colisor, Componente, FormaColisor, Malha};
 pub use settings::SceneSettings;
 
@@ -27,7 +29,8 @@ pub struct EntityId {
 }
 
 /// Posicao, rotacao e escala de uma entidade, relativas ao pai.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct Transform {
     pub translation: Vec3,
     pub rotation: Quat,

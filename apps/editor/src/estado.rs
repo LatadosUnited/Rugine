@@ -6,7 +6,9 @@ use crate::camera::CameraEditor;
 use crate::gizmo::{Alca, Gizmo};
 use rugine_app::prelude::{Quat, Vec3};
 use rugine_scene::settings::Color;
-use rugine_scene::{Colisor, EntityId, FormaColisor, Malha, Scene};
+use std::path::PathBuf;
+
+use rugine_scene::{Colisor, EntityId, FormaColisor, Malha, Registro, Scene};
 
 use crate::docking::{Aba, layout_padrao};
 
@@ -104,6 +106,14 @@ pub enum EstadoCompilacao {
 /// Tudo que o editor guarda entre frames.
 pub struct Editor {
     pub cena: Scene,
+    /// Onde a cena foi aberta ou salva pela ultima vez. `None` ate o primeiro
+    /// "Salvar como".
+    pub arquivo: Option<PathBuf>,
+    /// Tipos de componente que podem ser salvos, carregados e adicionados.
+    pub registro: Registro,
+    /// Erro ou aviso esperando o usuario fechar. Aparece num modal: um erro
+    /// ao salvar so no log passaria despercebido, e a cena se perderia.
+    pub mensagem: Option<String>,
 
     pub ferramenta: Ferramenta,
     pub espaco: Espaco,
@@ -158,6 +168,9 @@ impl Default for Editor {
     fn default() -> Self {
         Self {
             cena: cena_exemplo(),
+            arquivo: None,
+            registro: Registro::padrao(),
+            mensagem: None,
             ferramenta: Ferramenta::default(),
             espaco: Espaco::default(),
             colliders: ExibirColliders::default(),

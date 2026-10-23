@@ -11,6 +11,7 @@ use std::any::Any;
 use std::fmt::Debug;
 
 use rugine_core::math::Vec3;
+use serde::{Deserialize, Serialize};
 
 use crate::settings::Color;
 
@@ -28,7 +29,8 @@ pub trait Componente: Any + Debug {
 ///
 /// Por enquanto toda malha e o cubo unitario. A referencia a um arquivo de
 /// malha entra aqui quando houver importacao de glTF.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Malha {
     pub cor: Color,
 }
@@ -48,7 +50,7 @@ impl Componente for Malha {
 }
 
 /// Forma de um colisor, no espaco local da entidade.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum FormaColisor {
     /// Caixa com este tamanho total por eixo. `Vec3::ONE` coincide com a
     /// Malha, que e um cubo unitario.
@@ -61,7 +63,8 @@ pub enum FormaColisor {
 
 /// Volume para a fisica, que ainda nao existe. Por enquanto ele so e editado
 /// e desenhado.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Colisor {
     pub forma: FormaColisor,
     /// Deslocamento do centro em relacao a origem da entidade, no espaco local.

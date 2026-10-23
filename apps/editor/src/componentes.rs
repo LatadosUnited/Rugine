@@ -1,5 +1,7 @@
-//! Componentes do ponto de vista do editor: quais podem ser adicionados e
-//! como cada um aparece no Inspector.
+//! Como cada componente aparece no Inspector.
+//!
+//! Quais podem ser adicionados vem do `Registro` do `rugine-scene`, o mesmo que
+//! salva e carrega: um catalogo so, e nao dois que poderiam divergir.
 //!
 //! Fica no editor, e nao no `rugine-scene`, porque e UI: a cena nao depende
 //! de egui, e um jogo exportado nao precisa carregar os paineis.
@@ -10,35 +12,6 @@ use rugine_app::prelude::{Vec3, egui};
 use rugine_scene::{Colisor, Componente, FormaColisor, Malha};
 
 use crate::widgets;
-
-/// Um tipo que aparece no menu "Adicionar componente".
-pub struct Adicionavel {
-    pub criar: fn() -> Box<dyn Componente>,
-}
-
-impl Adicionavel {
-    /// O nome vem do proprio componente, para nao existir em dois lugares e
-    /// divergir.
-    pub fn nome(&self) -> &'static str {
-        (self.criar)().nome()
-    }
-}
-
-/// O menu, na ordem em que aparece.
-pub const ADICIONAVEIS: [Adicionavel; 2] = [
-    Adicionavel { criar: nova_malha },
-    Adicionavel {
-        criar: novo_colisor,
-    },
-];
-
-fn nova_malha() -> Box<dyn Componente> {
-    Box::new(Malha::default())
-}
-
-fn novo_colisor() -> Box<dyn Componente> {
-    Box::new(Colisor::default())
-}
 
 /// Os campos de um componente no Inspector.
 pub fn desenhar(ui: &mut egui::Ui, componente: &mut dyn Componente) {
@@ -117,18 +90,5 @@ fn desenhar_colisor(ui: &mut egui::Ui, colisor: &mut Colisor) {
                 ui.add(egui::DragValue::new(raio).speed(0.02).range(0.0..=f32::MAX));
             });
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Cada item do menu cria um tipo diferente; dois iguais fariam um deles
-    /// ser sempre recusado pela cena.
-    #[test]
-    fn adicionaveis_tem_nomes_distintos() {
-        let nomes: Vec<_> = ADICIONAVEIS.iter().map(Adicionavel::nome).collect();
-        assert_eq!(nomes, ["Malha", "Colisor"]);
     }
 }

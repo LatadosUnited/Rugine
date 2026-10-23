@@ -10,6 +10,7 @@ rugine-core.workspace = true
 rugine-render.workspace = true
 rugine-ui.workspace = true
 winit.workspace = true
+raw-window-handle.workspace = true
 pollster.workspace = true
 log.workspace = true
 anyhow.workspace = true

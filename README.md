@@ -3,9 +3,8 @@
 Engine de jogos em Rust sobre [wgpu](https://wgpu.rs) — Vulkan, DX12, Metal e
 WebGPU por uma única API.
 
-**Estado: Marco 3.** Editor com painéis encaixáveis, grafo de cena, câmera
-orbital e profundidade. Cada entidade é desenhada como um cubo na sua matriz de
-mundo, então editar uma transform no Inspector move o objeto no viewport. Ainda
+**Estado: Marco 4.** Editor com painéis encaixáveis, grafo de cena, câmera
+orbital, gizmos, componentes (Malha e Colisor) e cenas salvas em arquivo. Ainda
 não dá para fazer um jogo: não há malhas de verdade, materiais, física nem
 scripts.
 
@@ -13,6 +12,12 @@ scripts.
 
 ```bash
 cargo run -p editor
+```
+
+Com um arquivo, abre direto nessa cena:
+
+```bash
+cargo run -p editor -- minha.cena
 ```
 
 O sandbox (jogo sem editor, cena direto na janela) continua existindo:
@@ -45,6 +50,43 @@ O controle fica cinza quando a GPU ou o driver não oferecem nenhum modo sem
 sincronização para aquela janela — o `AutoNoVsync` do wgpu cairia para Fifo e a
 opção não faria efeito nenhum. Melhor um controle desabilitado com o motivo no
 tooltip do que um que muda de estado sem mudar o comportamento.
+
+### Arquivos de cena
+
+Menu Arquivo, ou `Ctrl+S` / `Ctrl+Shift+S` / `Ctrl+O`. A extensão é `.cena`, e o
+conteúdo é JSON legível:
+
+```json
+{
+  "versao": 1,
+  "entidades": [
+    {
+      "nome": "Torre",
+      "transform": { "translation": [0, 1, 0], "scale": [1, 2, 1] },
+      "componentes": [
+        { "tipo": "Malha", "dados": { "cor": { "r": 0.85, "g": 0.25, "b": 0.25 } } }
+      ],
+      "filhos": []
+    }
+  ]
+}
+```
+
+- **JSON, não RON.** Cada componente vai pelo nome, com os dados num valor
+  genérico, e o `ron::Value` não representa enums — o `FormaColisor` não
+  sobreviveria à ida e volta.
+- **Quase tudo é opcional.** Campo ausente usa o padrão, então um arquivo escrito
+  à mão só precisa do essencial, e um arquivo antigo abre num código que ganhou
+  campos novos.
+- **Problema em um componente não impede a cena de abrir.** Tipo desconhecido ou
+  dados inválidos viram aviso, e o resto carrega.
+- **`versao` maior que a conhecida é recusada** com um erro que diz isso, em vez
+  de um erro de campo inesperado.
+- **Salvar nunca deixa o arquivo pela metade.** Grava num `.tmp` ao lado e troca
+  no fim: se o processo morrer no meio, a cena anterior continua inteira.
+
+O que pode ir para o arquivo vem do `Registro` do `rugine-scene` — o mesmo que
+alimenta o menu "Adicionar componente".
 
 ### Navegação no viewport
 

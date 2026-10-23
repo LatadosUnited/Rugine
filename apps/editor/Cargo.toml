@@ -16,3 +16,4 @@ log.workspace = true
 egui_dock.workspace = true
 png = "0.18.1"
 rugine-render = { version = "0.1.0", path = "../../crates/rugine-render" }
+rfd.workspace = true

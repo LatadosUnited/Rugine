@@ -3,18 +3,39 @@
 use rugine_app::prelude::{Context, egui};
 
 use crate::estado::{Editor, EstadoCompilacao};
+use crate::persistencia;
 use crate::widgets;
 
 pub fn desenhar(ui: &mut egui::Ui, editor: &mut Editor, ctx: &mut Context<'_>) {
     egui::MenuBar::new().ui(ui, |ui| {
         ui.menu_button("Arquivo", |ui| {
             if ui.button("Nova cena").clicked() {
-                editor.cena = rugine_scene::Scene::new();
+                persistencia::nova(editor);
                 ui.close();
             }
-            if ui.button("Salvar cena").clicked() {
-                log::info!("serializacao de cena ainda nao implementada");
+            if ui
+                .add(egui::Button::new("Abrir...").shortcut_text("Ctrl+O"))
+                .clicked()
+            {
+                // Fechar o menu antes: o dialogo nativo segura o quadro ate
+                // ser fechado, e o menu ficaria aberto por baixo dele.
                 ui.close();
+                persistencia::abrir(editor, ctx);
+            }
+            ui.separator();
+            if ui
+                .add(egui::Button::new("Salvar").shortcut_text("Ctrl+S"))
+                .clicked()
+            {
+                ui.close();
+                persistencia::salvar(editor, ctx);
+            }
+            if ui
+                .add(egui::Button::new("Salvar como...").shortcut_text("Ctrl+Shift+S"))
+                .clicked()
+            {
+                ui.close();
+                persistencia::salvar_como(editor, ctx);
             }
             ui.separator();
             if ui.button("Sair").clicked() {
@@ -95,9 +116,13 @@ pub fn desenhar(ui: &mut egui::Ui, editor: &mut Editor, ctx: &mut Context<'_>) {
             }
 
             ui.label(
-                egui::RichText::new(format!("{} entidades", editor.cena.len()))
-                    .size(11.0)
-                    .color(egui::Color32::from_gray(130)),
+                egui::RichText::new(format!(
+                    "{}  |  {} entidades",
+                    persistencia::titulo(editor),
+                    editor.cena.len()
+                ))
+                .size(11.0)
+                .color(egui::Color32::from_gray(130)),
             );
 
             // O espaco que sobra entre o menu e os botoes vira a area de

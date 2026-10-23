@@ -126,4 +126,15 @@ impl Context<'_> {
     pub fn alternar_maximizada(&self) {
         self.window.set_maximized(!self.window.is_maximized());
     }
+
+    /// A janela como dona de dialogos nativos, como os de abrir e salvar.
+    ///
+    /// So os handles crus, e nao a `Window` da winit: o que um dialogo
+    /// precisa e saber sobre qual janela ficar modal, e expor a `Window`
+    /// inteira deixaria a aplicacao mexer na janela por fora da engine.
+    pub fn janela_dona(
+        &self,
+    ) -> &(impl raw_window_handle::HasWindowHandle + raw_window_handle::HasDisplayHandle) {
+        self.window
+    }
 }

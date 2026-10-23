@@ -8,3 +8,9 @@ license.workspace = true
 [dependencies]
 rugine-core.workspace = true
 log.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Direto, so para ligar `serde` nos tipos de matematica que os componentes e a
+# `Transform` carregam.
+glam = { workspace = true, features = ["serde"] }

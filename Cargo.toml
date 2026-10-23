@@ -36,6 +36,12 @@ log = "0.4.34"
 env_logger = "0.11.11"
 anyhow = "1.0.104"
 thiserror = "2.0.21"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+# Dialogos nativos de arquivo. No Linux usa o portal XDG por D-Bus, em Rust
+# puro: nada de GTK para linkar, e o build Linux continua sem dependencia de
+# sistema. Exige um `xdg-desktop-portal` rodando, o padrao dos desktops atuais.
+rfd = "0.17.2"
 
 # Builds de debug jogaveis: o codigo da engine fica em opt-level 1 (ainda
 # depuravel), mas as dependencias vao a 3 — wgpu e naga dominam o tempo de

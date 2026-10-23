@@ -11,6 +11,7 @@ mod docking;
 mod estado;
 mod gizmo;
 mod paineis;
+mod persistencia;
 mod picking;
 mod widgets;
 
@@ -92,7 +93,7 @@ impl App for Editor {
     }
 
     fn ui(&mut self, raiz: &mut egui::Ui, ctx: &mut Context<'_>) {
-        atalhos(raiz.ctx(), self);
+        atalhos(raiz.ctx(), self, ctx);
 
         // A ordem de declaracao define quem fica com os cantos: a barra de
         // menu atravessa o topo inteiro, os paineis laterais vao do menu ate
@@ -143,10 +144,34 @@ impl App for Editor {
         if self.barra_propria {
             paineis::bordas::desenhar(raiz.ctx(), ctx);
         }
+
+        self.mensagem_modal(raiz.ctx());
     }
 }
 
 impl Editor {
+    /// O erro ou aviso pendente, num modal que bloqueia o resto ate ser
+    /// fechado.
+    fn mensagem_modal(&mut self, egui: &egui::Context) {
+        let Some(texto) = &self.mensagem else {
+            return;
+        };
+
+        let resposta = egui::Modal::new(egui::Id::new("mensagem")).show(egui, |ui| {
+            ui.set_max_width(420.0);
+            ui.label(egui::RichText::new(texto.as_str()).size(12.0));
+            ui.add_space(10.0);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.button("OK").clicked()
+            })
+            .inner
+        });
+
+        if resposta.inner || resposta.should_close() {
+            self.mensagem = None;
+        }
+    }
+
     /// Arestas dos colisores, conforme a opcao "Exibir colliders".
     fn instancias_colisores(&self, saida: &mut Vec<Instancia>) {
         let selecionada = self.cena.selected();
@@ -244,7 +269,23 @@ fn salvar_png(caminho: &str, captura: &rugine_render::Captura) -> std::io::Resul
 ///
 /// Só agem quando nenhum campo de texto tem foco: sem essa checagem, digitar
 /// "move" no campo de busca trocaria de ferramenta no meio da palavra.
-fn atalhos(egui: &egui::Context, editor: &mut Editor) {
+fn atalhos(egui: &egui::Context, editor: &mut Editor, ctx: &mut Context<'_>) {
+    // Arquivo antes da checagem de foco: Ctrl+S tem que salvar mesmo com o
+    // cursor num campo de texto, como em qualquer editor. O mais especifico
+    // primeiro, senao Ctrl+S consumiria o Ctrl+Shift+S.
+    let atalho = |modificadores, tecla| egui::KeyboardShortcut::new(modificadores, tecla);
+    let comando = egui::Modifiers::COMMAND;
+
+    if egui
+        .input_mut(|i| i.consume_shortcut(&atalho(comando | egui::Modifiers::SHIFT, egui::Key::S)))
+    {
+        persistencia::salvar_como(editor, ctx);
+    } else if egui.input_mut(|i| i.consume_shortcut(&atalho(comando, egui::Key::S))) {
+        persistencia::salvar(editor, ctx);
+    } else if egui.input_mut(|i| i.consume_shortcut(&atalho(comando, egui::Key::O))) {
+        persistencia::abrir(editor, ctx);
+    }
+
     if egui.egui_wants_keyboard_input() {
         return;
     }
@@ -298,10 +339,16 @@ fn main() -> anyhow::Result<()> {
     // redimensionada. No Windows e no Linux a barra e nossa.
     let decoracao = Decoracao::recomendada();
 
-    let editor = Editor {
+    let mut editor = Editor {
         barra_propria: decoracao == Decoracao::Propria,
         ..Default::default()
     };
+
+    // `editor arquivo.cena` abre direto nessa cena. E o que um "abrir com" do
+    // sistema chama, e o que permite abrir uma cena sem passar por dialogo.
+    if let Some(caminho) = std::env::args_os().nth(1) {
+        persistencia::abrir_caminho(&mut editor, std::path::Path::new(&caminho));
+    }
 
     log::info!("decoracao de janela: {decoracao:?}");
 
