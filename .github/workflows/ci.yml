@@ -10,6 +10,8 @@ name: CI
 # `clippy` e `check` nao linkam, entao isso roda no Windows sem toolchain
 # cruzada. O CI fica para antes de integrar algo e para quando se quiser a
 # confirmacao de verdade.
+#
+# O codigo da engine fica em `engine/`; o `site/` nao passa pelo CI.
 on:
   pull_request:
   workflow_dispatch:
@@ -29,6 +31,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
 
+    # Todo `cargo` roda no workspace, que nao fica mais na raiz do repositorio.
+    defaults:
+      run:
+        working-directory: engine
+
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +45,8 @@ jobs:
 
       # Sem cache, cada execucao recompila wgpu e naga do zero.
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
 
       # Formatacao e a mesma em toda plataforma; rodar duas vezes so gastaria
       # minuto de runner.

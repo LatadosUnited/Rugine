@@ -10,6 +10,8 @@ scripts.
 
 ## Rodar
 
+De dentro desta pasta (`engine/`), onde fica o workspace Cargo:
+
 ```bash
 cargo run -p editor
 ```
