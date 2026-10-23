@@ -1,0 +1,384 @@
+/*
+  Um visual para o site todo: escuro, de ficha de pesquisa, como a tela de
+  tecnologias de um grande estrategia. As cores e as fontes ficam aqui; cada
+  pagina so usa as variaveis.
+*/
+:root {
+  color-scheme: dark;
+  --fundo: #0e171e;
+  --prancha: #121f28;
+  --painel: #172632;
+  --linha-fina: #263844;
+  --ouro: #b99558;
+  --ouro-claro: #e6c88e;
+  --pergaminho: #ebe3d1;
+  --suave: #97a3a4;
+  --apagado: #5d6a70;
+
+  --pesquisado-fundo: #2c3524;
+  --pesquisado-borda: #b99558;
+  --disponivel-fundo: #183444;
+  --disponivel-borda: #74b6cc;
+  --bloqueado-fundo: #161d23;
+  --bloqueado-borda: #2f3a42;
+
+  --nucleo: #cf7f4f;
+  --render: #5fa7c2;
+  --editor: #a688cf;
+
+  --display: "Cormorant SC", "Cormorant Garamond", Georgia, serif;
+  --corpo: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+
+  --gutter: max(16px, env(safe-area-inset-left, 0px));
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--fundo);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--corpo);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--pergaminho);
+  background:
+    radial-gradient(ellipse at 15% -8%, #1b3040 0%, transparent 55%),
+    radial-gradient(ellipse at 95% 108%, #1d2a22 0%, transparent 50%),
+    var(--fundo);
+}
+
+a {
+  color: var(--ouro-claro);
+  text-decoration-color: color-mix(in srgb, var(--ouro) 55%, transparent);
+  text-underline-offset: 2px;
+}
+a:hover {
+  color: #f6ddab;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ouro-claro);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--display);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ouro-claro);
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: clamp(30px, 5vw, 46px);
+  line-height: 1.02;
+  margin: 0;
+}
+h2 {
+  font-size: clamp(23px, 3vw, 29px);
+  line-height: 1.1;
+  margin: 0 0 10px;
+  letter-spacing: 0.05em;
+}
+h3 {
+  font-size: 21px;
+  margin: 0 0 6px;
+  letter-spacing: 0.04em;
+}
+code,
+kbd,
+samp {
+  font-family: var(--mono);
+  font-size: 0.88em;
+}
+code {
+  color: #d8c9a4;
+  background: #0f1a21;
+  border: 1px solid var(--linha-fina);
+  padding: 0 4px;
+}
+pre {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  background: #0b1318;
+  border: 1px solid var(--linha-fina);
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--pergaminho);
+}
+hr {
+  border: 0;
+  border-top: 1px solid var(--linha-fina);
+  margin: 26px 0;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 15px;
+}
+th,
+td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--linha-fina);
+  vertical-align: top;
+}
+th {
+  font-family: var(--display);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  color: var(--ouro);
+}
+blockquote {
+  margin: 0;
+  border-left: 2px solid var(--ouro);
+  padding: 2px 0 2px 14px;
+  color: var(--suave);
+}
+
+/* ----------------------------------------------------------- esqueleto */
+
+.envelope {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-inline: var(--gutter);
+}
+/* A arvore quer a tela inteira; o texto, uma coluna legivel. */
+.envelope.largo {
+  max-width: 1420px;
+}
+.envelope.texto {
+  max-width: 760px;
+}
+
+main {
+  flex: 1;
+  padding-block: 26px 46px;
+}
+
+.cabecalho {
+  border-bottom: 1px solid var(--ouro);
+  background: linear-gradient(180deg, rgba(23, 38, 50, 0.85), rgba(14, 23, 30, 0.6));
+  backdrop-filter: blur(6px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.cabecalho .envelope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 24px;
+  padding-block: 10px;
+}
+.marca {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.12em;
+  color: var(--ouro-claro);
+  text-decoration: none;
+}
+.marca span {
+  color: var(--suave);
+  font-family: var(--corpo);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  margin-left: 10px;
+}
+.navegacao {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  margin-left: auto;
+}
+.navegacao a {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  color: var(--suave);
+  text-decoration: none;
+  padding: 3px 11px 4px;
+  border: 1px solid transparent;
+}
+.navegacao a:hover {
+  color: var(--pergaminho);
+  border-color: var(--linha-fina);
+}
+.navegacao a[aria-current="page"] {
+  color: var(--ouro-claro);
+  border-color: var(--ouro);
+  background: linear-gradient(180deg, #223442, #182733);
+}
+
+.rodape {
+  border-top: 1px solid var(--linha-fina);
+  padding-block: 18px 26px;
+  font-size: 13.5px;
+  color: var(--apagado);
+}
+.rodape .envelope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  justify-content: space-between;
+}
+
+/* ------------------------------------------------------------- pedacos */
+
+.olho {
+  font-family: var(--display);
+  letter-spacing: 0.18em;
+  color: var(--ouro);
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.estado {
+  display: inline-block;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  padding: 1px 10px 2px;
+  border: 1px solid;
+}
+.estado.pesquisado {
+  color: var(--ouro-claro);
+  border-color: var(--ouro);
+  background: var(--pesquisado-fundo);
+}
+.estado.disponivel {
+  color: #bfe6f2;
+  border-color: var(--disponivel-borda);
+  background: var(--disponivel-fundo);
+}
+.estado.bloqueado {
+  color: var(--suave);
+  border-color: var(--bloqueado-borda);
+  background: var(--bloqueado-fundo);
+}
+
+.barra {
+  height: 8px;
+  border: 1px solid var(--ouro);
+  background: #0a1116;
+  overflow: hidden;
+}
+.barra i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #8a6c37, var(--ouro-claro));
+}
+
+.selo {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--cat);
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--cat) 45%, #10181e), #0c1318 75%);
+  position: relative;
+}
+.selo svg {
+  width: 24px;
+  height: 24px;
+}
+
+.ficha {
+  border: 1px solid var(--linha-fina);
+  background: linear-gradient(180deg, #19293500, #15222c);
+  padding: 16px 18px;
+}
+.ficha.ouro {
+  border-color: var(--ouro);
+  background: linear-gradient(180deg, #1b2c39, var(--painel));
+}
+
+.grade {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--suave);
+}
+
+.lista-limpa {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+/* Texto vindo de Markdown. O Astro nao poe classe nas tags geradas, entao as
+   regras pendem de um envelope. */
+.prosa {
+  font-size: 16.5px;
+}
+.prosa > * + * {
+  margin-top: 0.9em;
+}
+.prosa h2 {
+  margin-top: 1.7em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--linha-fina);
+}
+.prosa h3 {
+  margin-top: 1.4em;
+}
+.prosa ul,
+.prosa ol {
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+}
+.prosa li::marker {
+  color: var(--ouro);
+}
+.prosa li > ul,
+.prosa li > ol {
+  margin-top: 6px;
+}
+.prosa strong {
+  color: var(--ouro-claro);
+}
+.prosa em {
+  color: #d8c9a4;
+}
+.prosa table {
+  margin-block: 1.2em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+  }
+}

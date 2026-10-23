@@ -1,0 +1,1027 @@
+---
+import Painel from "./Painel.astro";
+import Selo from "./Selo.astro";
+import {
+  ALTURA,
+  ARESTAS,
+  CARTAO_A,
+  CARTAO_L,
+  COLUNAS_AREA,
+  CONTAGENS,
+  FAIXAS_ERA,
+  FILA,
+  FOCO,
+  LARGURA,
+  ORDEM_AREAS,
+  PERCENTUAL,
+  POR_ID,
+  ROTULO_ESTADO,
+  TECNOLOGIAS,
+  TOPO,
+  TOTAL,
+  AREAS,
+  ancestrais,
+  estado,
+  posicao,
+} from "../data/arvore";
+
+const CORES_ARESTA = {
+  pesquisado: "#b99558",
+  disponivel: "#74b6cc",
+  bloqueado: "#3a4750",
+};
+
+const cartoes = TECNOLOGIAS.map((t) => {
+  const p = posicao(t);
+  const st = estado(t);
+  const naFila = FILA.indexOf(t.id);
+  const faltam = t.req.filter((r) => !POR_ID[r]!.pronto).length;
+  return {
+    t,
+    p,
+    st,
+    naFila,
+    meta:
+      t.pronto ?? (st === "disponivel" ? "pronto para pesquisar" : `falta ${faltam}`),
+    // Os ancestrais vao no HTML para o realce nao precisar reconstruir o grafo
+    // no cliente: passar o mouse num cartao acende a corrente inteira.
+    cadeia: [...ancestrais(t.id)].join(" "),
+  };
+});
+---
+
+<section class="arvore">
+  <header class="resumo">
+    <div class="titulos">
+      <p class="olho">Rugine · árvore de pesquisa</p>
+      <h1>O que existe, o que dá para fazer agora</h1>
+      <p class="explica">
+        De cima para baixo: cada linha só pode existir depois das de cima. As três colunas são as
+        frentes de trabalho. Arraste a prancha para mover, <kbd>Ctrl</kbd> + roda para aproximar.
+      </p>
+    </div>
+    <div class="progresso">
+      <div class="contagem">
+        <span><b>{CONTAGENS.pesquisado}</b> de {TOTAL} pesquisadas</span>
+        <span><b>{CONTAGENS.disponivel}</b> disponíveis</span>
+        <span><b>{CONTAGENS.bloqueado}</b> bloqueadas</span>
+      </div>
+      <div class="barra"><i style={`width:${PERCENTUAL.toFixed(1)}%`}></i></div>
+      <ol class="fila">
+        {
+          FILA.map((id, i) => (
+            <li>
+              <button type="button" data-ir={id}>
+                <span class="n">{i + 1}</span>
+                <span>
+                  {POR_ID[id]!.nome}
+                  <small>{ROTULO_ESTADO[estado(POR_ID[id]!)]} · {AREAS[POR_ID[id]!.area].nome}</small>
+                </span>
+              </button>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </header>
+
+  <div class="controles">
+    <div class="filtros" role="group" aria-label="Filtrar por frente de trabalho">
+      <button type="button" class="chip" data-filtro="todas" aria-pressed="true">
+        <span class="ponto" style="background:var(--ouro-claro)"></span>Todas
+      </button>
+      {
+        ORDEM_AREAS.map((a) => (
+          <button type="button" class="chip" data-filtro={a} aria-pressed="false">
+            <span class="ponto" style={`background:${AREAS[a].cor}`}></span>
+            {AREAS[a].nome}
+          </button>
+        ))
+      }
+    </div>
+
+    <label class="busca">
+      <span class="sr">Procurar tecnologia</span>
+      <input type="search" id="busca" placeholder="Procurar… (gizmo, glTF, desfazer)" autocomplete="off" />
+    </label>
+
+    <div class="zoom" role="group" aria-label="Aproximar e afastar">
+      <button type="button" data-zoom="-1" title="Afastar" aria-label="Afastar">−</button>
+      <output id="zoom-valor">100%</output>
+      <button type="button" data-zoom="1" title="Aproximar" aria-label="Aproximar">+</button>
+      <button type="button" data-zoom="ajustar" title="Caber na largura">Ajustar</button>
+    </div>
+  </div>
+
+  <nav class="eras-atalho" aria-label="Ir para uma era">
+    {
+      FAIXAS_ERA.map((e) => (
+        <button type="button" data-era={e.y} class={e.futura ? "futura" : undefined}>
+          {e.n}
+          <small>{e.nome}</small>
+        </button>
+      ))
+    }
+  </nav>
+
+  <div class="mesa">
+    <div class="quadro">
+    <div class="moldura" id="moldura" tabindex="0" aria-label="Prancha da árvore de pesquisa">
+      <div class="palco" id="palco">
+        <div class="prancha" id="prancha" style={`width:${LARGURA}px;height:${ALTURA}px`}>
+          {
+            COLUNAS_AREA.map((c) => (
+              <div class="coluna-area" style={`left:${c.x}px;width:${c.largura}px`} data-area={c.id}>
+                <header style={`color:${c.cor};height:${TOPO}px`}>
+                  <b>{c.nome}</b>
+                  <small>{c.resumo}</small>
+                </header>
+              </div>
+            ))
+          }
+
+          {
+            FAIXAS_ERA.map((e) => (
+              <div
+                class={`faixa-era${e.futura ? " futura" : ""}`}
+                style={`top:${e.y}px;height:${e.altura}px`}
+                data-era-faixa={e.n}
+              >
+                <div class="rotulo">
+                  <b>{e.n}</b>
+                  <span>{e.nome}</span>
+                  <small>{e.data}</small>
+                </div>
+              </div>
+            ))
+          }
+
+          <svg
+            id="arestas"
+            width={LARGURA}
+            height={ALTURA}
+            viewBox={`0 0 ${LARGURA} ${ALTURA}`}
+            aria-hidden="true"
+          >
+            {
+              ARESTAS.map((a) => (
+                <path
+                  data-de={a.de}
+                  data-para={a.para}
+                  d={a.d}
+                  fill="none"
+                  stroke={CORES_ARESTA[a.estado]}
+                  stroke-width="1.6"
+                  opacity="0.75"
+                  stroke-dasharray={a.estado === "bloqueado" ? "5 5" : undefined}
+                />
+              ))
+            }
+          </svg>
+
+          {
+            cartoes.map(({ t, p, st, naFila, meta, cadeia }) => (
+              <button
+                type="button"
+                class={`cartao ${st}${t.id === FOCO ? " escolhido" : ""}`}
+                id={`c-${t.id}`}
+                data-id={t.id}
+                data-area={t.area}
+                data-nome={t.nome.toLowerCase()}
+                data-cadeia={cadeia}
+                style={`left:${p.x}px;top:${p.y}px;width:${CARTAO_L}px;height:${CARTAO_A}px`}
+                aria-label={`${t.nome}, ${ROTULO_ESTADO[st]}`}
+              >
+                <Selo area={t.area} tamanho={42} />
+                {naFila >= 0 && <span class="fila-num">{naFila + 1}</span>}
+                <span class="texto">
+                  <span class="nome">{t.nome}</span>
+                  <span class="meta">{meta}</span>
+                </span>
+              </button>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+      <p class="dica" id="dica">Arraste para mover · Ctrl + roda aproxima</p>
+    </div>
+
+    <div class="lado">
+      {TECNOLOGIAS.map((t) => <Painel t={t} oculto={t.id !== FOCO} />)}
+      <div class="legenda">
+        <span><i class="l-pesq"></i>Pesquisado</span>
+        <span><i class="l-disp"></i>Disponível</span>
+        <span><i class="l-bloq"></i>Bloqueado</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .arvore {
+    display: grid;
+    gap: 16px;
+  }
+
+  /* ------------------------------------------------------------- resumo */
+  .resumo {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    gap: 18px 32px;
+    align-items: end;
+    border-bottom: 1px solid var(--ouro);
+    padding-bottom: 14px;
+  }
+  .explica {
+    margin: 8px 0 0;
+    color: var(--suave);
+    max-width: 62ch;
+    font-size: 15px;
+  }
+  .explica kbd {
+    border: 1px solid var(--linha-fina);
+    background: #0f1a21;
+    padding: 0 4px;
+    font-size: 12px;
+  }
+  .progresso {
+    display: grid;
+    gap: 8px;
+  }
+  .contagem {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 18px;
+    font-size: 14px;
+    color: var(--suave);
+    font-variant-numeric: tabular-nums;
+  }
+  .contagem b {
+    color: var(--pergaminho);
+  }
+  .fila {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 3px;
+  }
+  .fila button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    text-align: left;
+    font: 500 14px var(--corpo);
+    color: var(--pergaminho);
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 3px 6px;
+    cursor: pointer;
+  }
+  .fila button:hover {
+    border-color: var(--linha-fina);
+    background: #152530;
+  }
+  .fila .n {
+    flex: none;
+    width: 19px;
+    height: 19px;
+    border-radius: 50%;
+    background: var(--ouro-claro);
+    color: #1b1408;
+    font: 700 12px/19px var(--corpo);
+    text-align: center;
+  }
+  .fila small {
+    display: block;
+    color: var(--suave);
+    font-size: 12px;
+  }
+
+  /* ---------------------------------------------------------- controles */
+  .controles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    align-items: center;
+  }
+  .filtros {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .chip {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: 0.06em;
+    color: var(--suave);
+    background: var(--painel);
+    border: 1px solid var(--linha-fina);
+    padding: 4px 13px 5px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .chip:hover {
+    color: var(--pergaminho);
+    border-color: var(--ouro);
+  }
+  .chip[aria-pressed="true"] {
+    color: var(--ouro-claro);
+    border-color: var(--ouro);
+    background: linear-gradient(180deg, #223442, #182733);
+  }
+  .ponto {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+  }
+  .busca {
+    flex: 1 1 200px;
+    min-width: 170px;
+  }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .busca input {
+    width: 100%;
+    font: 400 15px var(--corpo);
+    color: var(--pergaminho);
+    background: #0f1a21;
+    border: 1px solid var(--linha-fina);
+    padding: 5px 10px;
+  }
+  .busca input:focus {
+    border-color: var(--ouro);
+  }
+  .zoom {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+  .zoom button {
+    font: 600 15px var(--display);
+    letter-spacing: 0.04em;
+    color: var(--suave);
+    background: var(--painel);
+    border: 1px solid var(--linha-fina);
+    min-width: 30px;
+    padding: 4px 9px 5px;
+    cursor: pointer;
+  }
+  .zoom button:hover {
+    color: var(--pergaminho);
+    border-color: var(--ouro);
+  }
+  .zoom output {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--suave);
+    min-width: 46px;
+    text-align: center;
+  }
+
+  .eras-atalho {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .eras-atalho button {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    color: var(--ouro-claro);
+    background: #101c24;
+    border: 1px solid var(--linha-fina);
+    border-left: 2px solid var(--ouro);
+    padding: 3px 11px 4px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .eras-atalho button.futura {
+    color: var(--suave);
+    border-left-color: var(--bloqueado-borda);
+  }
+  .eras-atalho button:hover {
+    border-color: var(--ouro);
+  }
+  .eras-atalho small {
+    display: block;
+    font-family: var(--corpo);
+    font-size: 11.5px;
+    letter-spacing: 0;
+    color: var(--suave);
+  }
+
+  /* -------------------------------------------------------------- mesa */
+  .mesa {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 16px;
+    align-items: start;
+  }
+  .lado {
+    display: grid;
+    gap: 12px;
+    align-content: start;
+    position: sticky;
+    top: 64px;
+  }
+  @media (max-width: 1000px) {
+    .resumo {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .mesa {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .lado {
+      position: static;
+    }
+  }
+
+  /* A dica fica por cima da moldura, e nao dentro dela: dentro, ela rolaria
+     junto com a prancha e sumiria no primeiro arrasto. */
+  .quadro {
+    position: relative;
+    min-width: 0;
+  }
+  .moldura {
+    min-width: 0;
+    /* A prancha e para arrastar, nao para copiar: sem isto o arrasto vai
+       pintando de azul os nomes dos cartoes por onde o mouse passa. O texto
+       continua copiavel no painel ao lado. */
+    -webkit-user-select: none;
+    user-select: none;
+    /* Uma prancha alta: a altura e a da janela, para a rolagem de dentro ser a
+       rolagem da arvore, e nao a da pagina inteira. */
+    height: min(76vh, 900px);
+    border: 1px solid var(--ouro);
+    background: var(--prancha);
+    box-shadow:
+      inset 0 0 0 3px #0b1318,
+      inset 0 0 0 4px color-mix(in srgb, var(--ouro) 30%, transparent);
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: var(--ouro) #0b1318;
+    cursor: grab;
+    touch-action: pan-x pan-y;
+  }
+  .moldura.arrastando {
+    cursor: grabbing;
+  }
+  .moldura.arrastando .cartao {
+    pointer-events: none;
+  }
+  .palco {
+    transform-origin: 0 0;
+  }
+  .prancha {
+    position: relative;
+  }
+  .prancha svg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .dica {
+    position: absolute;
+    right: 10px;
+    bottom: 8px;
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--apagado);
+    background: rgba(11, 19, 24, 0.82);
+    border: 1px solid var(--linha-fina);
+    padding: 2px 7px;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .dica.fora {
+    opacity: 0;
+  }
+
+  .coluna-area {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-right: 1px solid var(--linha-fina);
+  }
+  .coluna-area:first-of-type {
+    border-left: 1px solid var(--linha-fina);
+  }
+  .coluna-area[data-area="render"] {
+    background: rgba(255, 255, 255, 0.014);
+  }
+  .coluna-area header {
+    display: grid;
+    align-content: center;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--linha-fina);
+    background: linear-gradient(180deg, #1a2b37, transparent);
+  }
+  .coluna-area header b {
+    font-family: var(--display);
+    font-size: 18px;
+    letter-spacing: 0.08em;
+    line-height: 1;
+  }
+  .coluna-area header small {
+    font-size: 11.5px;
+    color: var(--suave);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .faixa-era {
+    position: absolute;
+    left: 0;
+    right: 0;
+    border-top: 1px solid var(--linha-fina);
+  }
+  .faixa-era:nth-of-type(even) {
+    background: rgba(255, 255, 255, 0.012);
+  }
+  .faixa-era .rotulo {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 108px;
+    display: grid;
+    align-content: center;
+    gap: 1px;
+    padding: 0 10px;
+    border-right: 1px solid var(--linha-fina);
+    background: #0f1a21;
+  }
+  .faixa-era .rotulo b {
+    font-family: var(--display);
+    font-size: 17px;
+    letter-spacing: 0.1em;
+    color: var(--ouro-claro);
+    line-height: 1;
+  }
+  .faixa-era .rotulo span {
+    font-size: 13px;
+    color: var(--pergaminho);
+    line-height: 1.1;
+  }
+  .faixa-era .rotulo small {
+    font-size: 11px;
+    color: var(--suave);
+  }
+  .faixa-era.futura .rotulo b {
+    color: var(--suave);
+  }
+
+  /* ------------------------------------------------------------ cartoes */
+  .cartao {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 7px 5px 5px;
+    border: 1px solid;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    color: var(--pergaminho);
+    transition:
+      opacity 0.18s,
+      transform 0.18s,
+      box-shadow 0.18s;
+  }
+  .cartao:hover {
+    transform: translateY(-1px);
+  }
+  .cartao.pesquisado {
+    background: linear-gradient(180deg, #354029, var(--pesquisado-fundo));
+    border-color: var(--pesquisado-borda);
+  }
+  .cartao.disponivel {
+    background: linear-gradient(180deg, #1f4256, var(--disponivel-fundo));
+    border-color: var(--disponivel-borda);
+    box-shadow:
+      0 0 0 1px rgba(116, 182, 204, 0.18),
+      0 0 14px rgba(116, 182, 204, 0.12);
+  }
+  .cartao.bloqueado {
+    background: var(--bloqueado-fundo);
+    border-color: var(--bloqueado-borda);
+    color: var(--suave);
+  }
+  .cartao.bloqueado :global(.selo) {
+    filter: grayscale(0.85) brightness(0.7);
+  }
+  .cartao.escolhido {
+    box-shadow:
+      0 0 0 2px var(--ouro-claro),
+      0 0 20px rgba(230, 200, 142, 0.35);
+  }
+  .cartao.esmaecido {
+    opacity: 0.18;
+  }
+  .cartao.caminho {
+    box-shadow: 0 0 0 1px var(--ouro-claro);
+  }
+  .fila-num {
+    position: absolute;
+    left: 39px;
+    top: 3px;
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    background: var(--ouro-claro);
+    color: #1b1408;
+    font: 700 11px/17px var(--corpo);
+    text-align: center;
+  }
+  .texto {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+  }
+  .nome {
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1.15;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--suave);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cartao.pesquisado .meta {
+    color: #c7b78f;
+  }
+  .cartao.disponivel .meta {
+    color: #9fd0e0;
+  }
+
+  .legenda {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    font-size: 13px;
+    color: var(--suave);
+  }
+  .legenda span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legenda i {
+    width: 22px;
+    height: 12px;
+    border: 1px solid;
+    display: inline-block;
+  }
+  .legenda .l-pesq {
+    background: var(--pesquisado-fundo);
+    border-color: var(--pesquisado-borda);
+  }
+  .legenda .l-disp {
+    background: var(--disponivel-fundo);
+    border-color: var(--disponivel-borda);
+  }
+  .legenda .l-bloq {
+    background: var(--bloqueado-fundo);
+    border-color: var(--bloqueado-borda);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cartao,
+    .cartao:hover {
+      transition: none;
+      transform: none;
+    }
+  }
+</style>
+
+<script>
+  // A prancha vive dentro de uma moldura com rolagem propria. Mover e rolar
+  // essa moldura: arrastar com o mouse, roda, teclas, e o zoom escala o palco
+  // sem mexer nas posicoes calculadas no build.
+  const moldura = document.getElementById("moldura") as HTMLElement | null;
+  const palco = document.getElementById("palco") as HTMLElement | null;
+  const prancha = document.getElementById("prancha") as HTMLElement | null;
+  const svg = document.getElementById("arestas") as SVGSVGElement | null;
+  const valorZoom = document.getElementById("zoom-valor") as HTMLOutputElement | null;
+  const dica = document.getElementById("dica") as HTMLElement | null;
+  if (moldura && palco && prancha && svg) {
+    const LARGURA = prancha.offsetWidth;
+    const ALTURA = prancha.offsetHeight;
+    const cartoes = [...prancha.querySelectorAll<HTMLElement>(".cartao")];
+    const arestas = [...svg.querySelectorAll<SVGPathElement>("path")];
+    const areaDe = new Map(cartoes.map((c) => [c.dataset.id!, c.dataset.area!]));
+
+    // ----------------------------------------------------------- zoom
+    const MIN = 0.35;
+    const MAX = 1.6;
+    let zoom = 1;
+
+    function aplicarZoom(z: number, ancora?: { x: number; y: number }) {
+      const antes = zoom;
+      zoom = Math.min(MAX, Math.max(MIN, z));
+      palco!.style.transform = `scale(${zoom})`;
+      palco!.style.width = `${LARGURA * zoom}px`;
+      palco!.style.height = `${ALTURA * zoom}px`;
+      if (valorZoom) valorZoom.value = `${Math.round(zoom * 100)}%`;
+      // Mantem sob o cursor o mesmo ponto da prancha que estava antes.
+      if (ancora) {
+        const f = zoom / antes;
+        moldura!.scrollLeft = (moldura!.scrollLeft + ancora.x) * f - ancora.x;
+        moldura!.scrollTop = (moldura!.scrollTop + ancora.y) * f - ancora.y;
+      }
+    }
+
+    const zoomQueCabe = () =>
+      Math.min(1, Math.max(MIN, (moldura!.clientWidth - 14) / LARGURA));
+
+    // Na abertura a prancha cabe na largura, mas nunca tao pequena que o nome
+    // do cartao deixe de ser legivel: abaixo disso e melhor rolar de lado.
+    const zoomDeAbertura = () => Math.max(0.62, zoomQueCabe());
+
+    document.querySelectorAll<HTMLElement>("[data-zoom]").forEach((b) => {
+      b.addEventListener("click", () => {
+        const q = b.dataset.zoom!;
+        if (q === "ajustar") {
+          aplicarZoom(zoomQueCabe());
+          return;
+        }
+        const centro = {
+          x: moldura!.clientWidth / 2,
+          y: moldura!.clientHeight / 2,
+        };
+        aplicarZoom(zoom + Number(q) * 0.15, centro);
+      });
+    });
+
+    // Roda sozinha rola, como em qualquer pagina alta. Com Ctrl (ou o pinch do
+    // trackpad, que o navegador manda como Ctrl+roda) ela aproxima.
+    moldura.addEventListener(
+      "wheel",
+      (e) => {
+        if (!e.ctrlKey && !e.metaKey) return;
+        e.preventDefault();
+        const r = moldura!.getBoundingClientRect();
+        aplicarZoom(zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1), {
+          x: e.clientX - r.left,
+          y: e.clientY - r.top,
+        });
+      },
+      { passive: false },
+    );
+
+    // ---------------------------------------------------------- arrasto
+    let arrasto: { x: number; y: number; sl: number; st: number; id: number } | null = null;
+
+    moldura.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      // No toque quem rola e o proprio navegador; arrastar aqui tambem moveria
+      // a prancha, e ela andaria o dobro.
+      if (e.pointerType !== "mouse") return;
+      // Clique no cartao e selecao, nao arrasto; o arrasto comeca no fundo.
+      if ((e.target as HTMLElement).closest(".cartao")) return;
+      // Sem o preventDefault o navegador comeca uma selecao (ou um arrasto do
+      // SVG) junto com o nosso. Ele tambem cancela o foco, que as setas usam,
+      // entao o foco e dado a mao.
+      e.preventDefault();
+      getSelection()?.removeAllRanges();
+      moldura!.focus({ preventScroll: true });
+      arrasto = {
+        x: e.clientX,
+        y: e.clientY,
+        sl: moldura!.scrollLeft,
+        st: moldura!.scrollTop,
+        id: e.pointerId,
+      };
+      moldura!.setPointerCapture(e.pointerId);
+      moldura!.classList.add("arrastando");
+      dica?.classList.add("fora");
+    });
+    moldura.addEventListener("pointermove", (e) => {
+      if (!arrasto || e.pointerId !== arrasto.id) return;
+      moldura!.scrollLeft = arrasto.sl - (e.clientX - arrasto.x);
+      moldura!.scrollTop = arrasto.st - (e.clientY - arrasto.y);
+    });
+    const soltar = (e: PointerEvent) => {
+      if (!arrasto || e.pointerId !== arrasto.id) return;
+      arrasto = null;
+      moldura!.classList.remove("arrastando");
+    };
+    moldura.addEventListener("pointerup", soltar);
+    moldura.addEventListener("pointercancel", soltar);
+
+    // Setas movem a prancha quando a moldura tem o foco.
+    moldura.addEventListener("keydown", (e) => {
+      const passo = e.shiftKey ? 320 : 90;
+      const mover: Record<string, [number, number]> = {
+        ArrowUp: [0, -passo],
+        ArrowDown: [0, passo],
+        ArrowLeft: [-passo, 0],
+        ArrowRight: [passo, 0],
+      };
+      const m = mover[e.key];
+      if (m) {
+        e.preventDefault();
+        moldura!.scrollBy({ left: m[0], top: m[1] });
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        moldura!.scrollTo({ top: 0, left: 0 });
+      } else if (e.key === "End") {
+        e.preventDefault();
+        moldura!.scrollTo({ top: moldura!.scrollHeight });
+      }
+    });
+
+    // -------------------------------------------------------- navegacao
+    const suave = () =>
+      matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? ("auto" as ScrollBehavior)
+        : ("smooth" as ScrollBehavior);
+
+    function irAte(id: string) {
+      const c = document.getElementById(`c-${id}`);
+      if (!c) return;
+      moldura!.scrollTo({
+        left: Math.max(0, (c.offsetLeft + c.offsetWidth / 2) * zoom - moldura!.clientWidth / 2),
+        top: Math.max(0, (c.offsetTop + c.offsetHeight / 2) * zoom - moldura!.clientHeight / 2),
+        behavior: suave(),
+      });
+    }
+
+    document.querySelectorAll<HTMLElement>("[data-era]").forEach((b) => {
+      b.addEventListener("click", () => {
+        moldura!.scrollTo({ top: Number(b.dataset.era) * zoom - 8, behavior: suave() });
+      });
+    });
+
+    // ---------------------------------------------------------- selecao
+    let escolhido = document.querySelector<HTMLElement>(".cartao.escolhido")?.dataset.id ?? "";
+
+    function mostrar(id: string) {
+      if (id === escolhido) return;
+      document.querySelector(`[data-painel="${escolhido}"]`)?.setAttribute("hidden", "");
+      document.querySelector(`[data-painel="${id}"]`)?.removeAttribute("hidden");
+      escolhido = id;
+      pintar();
+    }
+
+    // --------------------------------------------------- filtro e busca
+    let filtro = "todas";
+    let busca = "";
+    let realce: string | null = null;
+
+    const cadeiaDe = (id: string) =>
+      new Set([
+        id,
+        ...(document.getElementById(`c-${id}`)?.dataset.cadeia || "").split(" ").filter(Boolean),
+      ]);
+
+    // Dois realces de intensidades diferentes. Passar o mouse (ou chegar pelo
+    // teclado) e uma pergunta rapida, entao apaga o resto da prancha. O cartao
+    // escolhido e o estado de repouso: a corrente dele fica acesa sem apagar
+    // nada, porque e assim que a prancha passa a maior parte do tempo — e no
+    // toque, que nao tem hover, e o unico realce que existe.
+    function pintar() {
+      const forte = realce != null;
+      const foco = realce ?? (escolhido || null);
+      const cadeia = foco ? cadeiaDe(foco) : null;
+
+      for (const c of cartoes) {
+        const id = c.dataset.id!;
+        const fora =
+          (filtro !== "todas" && c.dataset.area !== filtro) ||
+          (busca !== "" && !c.dataset.nome!.includes(busca)) ||
+          (forte && !cadeia!.has(id));
+        c.classList.toggle("esmaecido", fora);
+        c.classList.toggle("caminho", cadeia != null && id !== foco && cadeia.has(id));
+        c.classList.toggle("escolhido", id === escolhido);
+      }
+
+      for (const p of arestas) {
+        const de = p.dataset.de!;
+        const para = p.dataset.para!;
+        // A cor original vem do estado (pesquisado, disponivel, bloqueado);
+        // na corrente acesa ela vira ouro, ou uma corrente de itens bloqueados
+        // continuaria cinza e tracejada, que e justamente o que nao se ve.
+        p.dataset.cor ??= p.getAttribute("stroke") ?? "";
+        const naCorrente = cadeia != null && cadeia.has(de) && cadeia.has(para);
+
+        let opacidade = 0.75;
+        if (filtro !== "todas" && areaDe.get(de) !== filtro && areaDe.get(para) !== filtro) {
+          opacidade = 0.08;
+        }
+        if (busca !== "") opacidade = Math.min(opacidade, 0.14);
+        if (naCorrente) opacidade = 1;
+        else if (forte) opacidade = 0.06;
+        else if (cadeia != null) opacidade = Math.min(opacidade, 0.4);
+
+        p.setAttribute("opacity", String(opacidade));
+        p.setAttribute("stroke-width", naCorrente ? "2.4" : "1.6");
+        p.setAttribute("stroke", naCorrente ? "#e6c88e" : p.dataset.cor);
+      }
+    }
+
+    document.querySelectorAll<HTMLElement>("[data-filtro]").forEach((b) => {
+      b.addEventListener("click", () => {
+        filtro = b.dataset.filtro!;
+        document
+          .querySelectorAll<HTMLElement>("[data-filtro]")
+          .forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+        pintar();
+      });
+    });
+
+    const campo = document.getElementById("busca") as HTMLInputElement | null;
+    campo?.addEventListener("input", () => {
+      busca = campo.value.trim().toLowerCase();
+      pintar();
+      // Um resultado so: a prancha vai ate ele, que e o que se queria pedindo.
+      const achados = cartoes.filter((c) => !c.classList.contains("esmaecido"));
+      if (busca !== "" && achados.length === 1) {
+        mostrar(achados[0]!.dataset.id!);
+        irAte(achados[0]!.dataset.id!);
+      }
+    });
+
+    // ------------------------------------------------------------ cliques
+    prancha.addEventListener("click", (e) => {
+      const c = (e.target as HTMLElement).closest<HTMLElement>(".cartao");
+      if (c) mostrar(c.dataset.id!);
+    });
+    // No toque o navegador tambem dispara pointerover (e da foco ao botao) a
+    // cada toque, e o realce forte ficaria preso no cartao tocado, apagando a
+    // prancha inteira. So o mouse tem hover de verdade, e so o teclado mostra
+    // foco visivel; o toque fica com o realce do cartao escolhido.
+    prancha.addEventListener("pointerover", (e) => {
+      if (e.pointerType !== "mouse") return;
+      const c = (e.target as HTMLElement).closest<HTMLElement>(".cartao");
+      const id = c ? c.dataset.id! : null;
+      if (id !== realce) {
+        realce = id;
+        pintar();
+      }
+    });
+    prancha.addEventListener("pointerleave", (e) => {
+      if (e.pointerType !== "mouse") return;
+      realce = null;
+      pintar();
+    });
+    prancha.addEventListener("focusin", (e) => {
+      const c = (e.target as HTMLElement).closest<HTMLElement>(".cartao");
+      if (c && c.matches(":focus-visible")) {
+        realce = c.dataset.id!;
+        pintar();
+      }
+    });
+    prancha.addEventListener("focusout", () => {
+      realce = null;
+      pintar();
+    });
+
+    // Os botoes "Requer", "Libera" e a fila levam a prancha ao item.
+    document.addEventListener("click", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>("[data-ir]");
+      if (!b) return;
+      mostrar(b.dataset.ir!);
+      irAte(b.dataset.ir!);
+    });
+
+    // --------------------------------------------------------- abertura
+    aplicarZoom(zoomDeAbertura());
+
+    // Um link de outra pagina pode pedir um item: /arvore/#c-gizmos.
+    const pedido = location.hash.match(/^#c-(.+)$/)?.[1];
+    if (pedido && document.getElementById(`c-${pedido}`)) mostrar(pedido);
+
+    pintar();
+    requestAnimationFrame(() => {
+      if (escolhido) irAte(escolhido);
+      setTimeout(() => dica?.classList.add("fora"), 4000);
+    });
+    addEventListener("resize", () => {
+      if (valorZoom) valorZoom.value = `${Math.round(zoom * 100)}%`;
+    });
+  }
+</script>

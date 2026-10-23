@@ -1,0 +1,173 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import { caminho } from "../../data/caminho";
+import { dataLonga } from "../../data/datas";
+import { AREAS, POR_ID, ROTULO_ESTADO, estado } from "../../data/arvore";
+
+const entradas = (await getCollection("diario")).sort((a, b) => a.data.marco - b.data.marco);
+const REPO = "https://github.com/LatadosUnited/Rugine";
+---
+
+<Base
+  titulo="Diário"
+  descricao="Os marcos da Rugine em ordem: o que ficou de pé em cada um, o que custou tempo e o que só apareceu lendo o viewport de volta da GPU."
+>
+  <p class="olho">Rugine · diário</p>
+  <h1>O que aconteceu, em ordem</h1>
+  <p class="chamada">
+    Um texto por marco. Cada um diz o que ficou de pé, o que custou tempo e o que o erro ensinou —
+    porque os bugs caros deste projeto não deram erro nenhum: deram tela preta.
+  </p>
+
+  <ol class="marcos">
+    {
+      entradas.map((e) => (
+        <li>
+          <article>
+            <header>
+              <span class="numero">{e.data.marco}</span>
+              <div>
+                <h2>
+                  <a href={caminho(`diario/${e.id}/`)}>{e.data.titulo}</a>
+                </h2>
+                <p class="quando mono">
+                  {dataLonga(e.data.data)}
+                  {e.data.commits.length > 0 && (
+                    <>
+                      {" · "}
+                      {e.data.commits.map((c, i) => (
+                        <>
+                          {i > 0 && " "}
+                          <a href={`${REPO}/commit/${c}`}>{c}</a>
+                        </>
+                      ))}
+                    </>
+                  )}
+                </p>
+              </div>
+            </header>
+            <p class="resumo">{e.data.resumo}</p>
+            {e.data.tecnologias.length > 0 && (
+              <ul class="pecas">
+                {e.data.tecnologias
+                  .filter((id) => POR_ID[id])
+                  .map((id) => {
+                    const t = POR_ID[id]!;
+                    return (
+                      <li>
+                        <a
+                          href={`${caminho("arvore/")}#c-${id}`}
+                          title={`${t.nome} · ${ROTULO_ESTADO[estado(t)]}`}
+                        >
+                          <i style={`background:${AREAS[t.area].cor}`} />
+                          {t.nome}
+                        </a>
+                      </li>
+                    );
+                  })}
+              </ul>
+            )}
+            <p class="ir">
+              <a href={caminho(`diario/${e.id}/`)}>Ler o marco {e.data.marco} →</a>
+            </p>
+          </article>
+        </li>
+      ))
+    }
+  </ol>
+</Base>
+
+<style>
+  .chamada {
+    font-size: 17px;
+    max-width: 66ch;
+    margin-bottom: 28px;
+  }
+  .marcos {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 16px;
+  }
+  .marcos article {
+    border: 1px solid var(--linha-fina);
+    border-left: 2px solid var(--ouro);
+    background: linear-gradient(180deg, #19293500, #15222c);
+    padding: 14px 18px 16px;
+  }
+  .marcos header {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .numero {
+    flex: none;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--ouro);
+    background: var(--pesquisado-fundo);
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 21px;
+    line-height: 36px;
+    text-align: center;
+    color: var(--ouro-claro);
+  }
+  .marcos h2 {
+    margin: 0;
+    font-size: 24px;
+  }
+  .marcos h2 a {
+    text-decoration: none;
+  }
+  .marcos h2 a:hover {
+    text-decoration: underline;
+  }
+  .quando {
+    margin: 3px 0 0;
+    font-size: 12.5px;
+  }
+  .resumo {
+    margin: 10px 0 0;
+    max-width: 72ch;
+  }
+  .pecas {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .pecas a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--pergaminho);
+    text-decoration: none;
+    background: #0f1a21;
+    border: 1px solid var(--linha-fina);
+    padding: 2px 8px;
+  }
+  .pecas a:hover {
+    border-color: var(--ouro);
+  }
+  .pecas i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .ir {
+    margin: 12px 0 0;
+    font-family: var(--display);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+  .ir a {
+    text-decoration: none;
+  }
+</style>

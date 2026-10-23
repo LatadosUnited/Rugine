@@ -11,7 +11,8 @@ name: CI
 # cruzada. O CI fica para antes de integrar algo e para quando se quiser a
 # confirmacao de verdade.
 #
-# O codigo da engine fica em `engine/`; o `site/` nao passa pelo CI.
+# O codigo da engine fica em `engine/`. O `site/` tem um job proprio: ele e
+# Node, compila em segundos e nao divide nada com o workspace Cargo.
 on:
   pull_request:
   workflow_dispatch:
@@ -68,3 +69,33 @@ jobs:
       # (matematica e grafo de cena).
       - name: Testes
         run: cargo test --workspace --locked
+
+  # O site e estatico, mas nao e HTML solto: a arvore de pesquisa e montada no
+  # build a partir de dados tipados, e esse build falha de proposito quando um
+  # pre-requisito aponta para algo que nao existe ou nao esta acima na arvore.
+  # Rodar isso custa segundos e pega o dado quebrado antes do deploy.
+  site:
+    name: site
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: site
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Instalar
+        run: npm ci
+
+      - name: Tipos
+        run: npm run check
+
+      - name: Build
+        run: npm run build

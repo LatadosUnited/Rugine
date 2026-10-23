@@ -1,0 +1,19 @@
+---
+import { AREAS, GLIFOS, type AreaId } from "../data/areas";
+
+interface Props {
+  area: AreaId;
+  tamanho?: number;
+}
+
+const { area, tamanho = 46 } = Astro.props;
+const cor = AREAS[area].cor;
+---
+
+<span
+  class="selo"
+  style={`--cat:${cor};color:${cor};width:${tamanho}px;height:${tamanho}px`}
+  aria-hidden="true"
+>
+  <svg viewBox="0 0 24 24" style={`width:${Math.round(tamanho * 0.52)}px;height:${Math.round(tamanho * 0.52)}px`} set:html={GLIFOS[area]} />
+</span>

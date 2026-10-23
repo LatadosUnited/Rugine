@@ -1,0 +1,188 @@
+---
+import type { GetStaticPaths } from "astro";
+import { getCollection, render } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import { caminho } from "../../data/caminho";
+import { dataLonga } from "../../data/datas";
+import { AREAS, POR_ID, ROTULO_ESTADO, estado } from "../../data/arvore";
+
+export const getStaticPaths = (async () => {
+  const entradas = (await getCollection("diario")).sort((a, b) => a.data.marco - b.data.marco);
+  return entradas.map((entrada, i) => ({
+    params: { slug: entrada.id },
+    props: {
+      entrada,
+      anterior: entradas[i - 1] ?? null,
+      proximo: entradas[i + 1] ?? null,
+    },
+  }));
+}) satisfies GetStaticPaths;
+
+const { entrada, anterior, proximo } = Astro.props;
+const { Content } = await render(entrada);
+const REPO = "https://github.com/LatadosUnited/Rugine";
+---
+
+<Base titulo={entrada.data.titulo} descricao={entrada.data.resumo} largura="texto">
+  <p class="olho">
+    <a href={caminho("diario/")}>Diário</a> · Marco {entrada.data.marco}
+  </p>
+  <h1>{entrada.data.titulo}</h1>
+  <p class="quando mono">
+    {dataLonga(entrada.data.data)}
+    {
+      entrada.data.commits.length > 0 && (
+        <>
+          {" · "}
+          {entrada.data.commits.map((c, i) => (
+            <>
+              {i > 0 && " "}
+              <a href={`${REPO}/commit/${c}`}>{c}</a>
+            </>
+          ))}
+        </>
+      )
+    }
+  </p>
+  <p class="resumo">{entrada.data.resumo}</p>
+
+  {
+    entrada.data.tecnologias.length > 0 && (
+      <aside class="ficha pecas">
+        <h2>O que este marco trouxe</h2>
+        <ul>
+          {entrada.data.tecnologias
+            .filter((id) => POR_ID[id])
+            .map((id) => {
+              const t = POR_ID[id]!;
+              return (
+                <li>
+                  <a href={`${caminho("arvore/")}#c-${id}`}>
+                    <i style={`background:${AREAS[t.area].cor}`} />
+                    {t.nome}
+                    <small>{ROTULO_ESTADO[estado(t)]}</small>
+                  </a>
+                </li>
+              );
+            })}
+        </ul>
+      </aside>
+    )
+  }
+
+  <div class="prosa">
+    <Content />
+  </div>
+
+  <nav class="passos" aria-label="Outros marcos">
+    {
+      anterior ? (
+        <a href={caminho(`diario/${anterior.id}/`)}>
+          <small>← Marco {anterior.data.marco}</small>
+          {anterior.data.titulo}
+        </a>
+      ) : (
+        <span />
+      )
+    }
+    {
+      proximo ? (
+        <a class="direita" href={caminho(`diario/${proximo.id}/`)}>
+          <small>Marco {proximo.data.marco} →</small>
+          {proximo.data.titulo}
+        </a>
+      ) : (
+        <span />
+      )
+    }
+  </nav>
+</Base>
+
+<style>
+  .olho a {
+    text-decoration: none;
+  }
+  .quando {
+    margin: 8px 0 0;
+    font-size: 13px;
+  }
+  .resumo {
+    font-size: 17.5px;
+    color: var(--pergaminho);
+    border-left: 2px solid var(--ouro);
+    padding-left: 14px;
+    margin: 16px 0 22px;
+  }
+  .pecas {
+    margin-bottom: 26px;
+  }
+  .pecas h2 {
+    font-size: 17px;
+    letter-spacing: 0.1em;
+    margin: 0 0 8px;
+    color: var(--ouro);
+  }
+  .pecas ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .pecas a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13.5px;
+    color: var(--pergaminho);
+    text-decoration: none;
+    background: #0f1a21;
+    border: 1px solid var(--linha-fina);
+    padding: 2px 9px;
+  }
+  .pecas a:hover {
+    border-color: var(--ouro);
+  }
+  .pecas i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+  .pecas small {
+    color: var(--suave);
+    font-size: 11.5px;
+  }
+
+  .passos {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 40px;
+    border-top: 1px solid var(--linha-fina);
+    padding-top: 16px;
+  }
+  .passos a {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 18px;
+    letter-spacing: 0.03em;
+    text-decoration: none;
+    border: 1px solid var(--linha-fina);
+    padding: 9px 13px;
+    display: grid;
+    gap: 2px;
+  }
+  .passos a:hover {
+    border-color: var(--ouro);
+  }
+  .passos a.direita {
+    text-align: right;
+  }
+  .passos small {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--suave);
+    letter-spacing: 0;
+  }
+</style>

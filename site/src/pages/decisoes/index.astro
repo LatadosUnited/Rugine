@@ -1,0 +1,133 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import { caminho } from "../../data/caminho";
+import { AREAS } from "../../data/areas";
+
+const decisoes = (await getCollection("decisoes")).sort((a, b) => a.data.ordem - b.data.ordem);
+
+const NOME_AREA: Record<string, string> = {
+  nucleo: AREAS.nucleo.nome,
+  render: AREAS.render.nome,
+  editor: AREAS.editor.nome,
+  projeto: "Projeto",
+};
+const COR_AREA: Record<string, string> = {
+  nucleo: AREAS.nucleo.cor,
+  render: AREAS.render.cor,
+  editor: AREAS.editor.cor,
+  projeto: "#b99558",
+};
+---
+
+<Base
+  titulo="Decisões"
+  descricao="As escolhas técnicas da Rugine, uma por página, com o que foi adotado, o que foi descartado e o motivo — de DX12 no Windows a JSON em vez de RON."
+>
+  <p class="olho">Rugine · decisões</p>
+  <h1>Escolhas, com os dois lados</h1>
+  <p class="chamada">
+    Cada decisão diz o que foi adotado <em>e</em> o que foi descartado. Sem a segunda metade, uma
+    decisão parece gosto; com ela, dá para ver o que mudaria se a premissa mudasse — e quase todas
+    aqui saíram de uma premissa concreta, como um driver que segfaulta ou um formato que não
+    representa enums.
+  </p>
+
+  <ul class="lista">
+    {
+      decisoes.map((d) => (
+        <li>
+          <a href={caminho(`decisoes/${d.id}/`)}>
+            <span class="etiqueta" style={`border-color:${COR_AREA[d.data.area]};color:${COR_AREA[d.data.area]}`}>
+              {NOME_AREA[d.data.area]}
+            </span>
+            <h2>{d.data.titulo}</h2>
+            <p>{d.data.resumo}</p>
+            <div class="lados">
+              <span class="sim">{d.data.escolha}</span>
+              <span class="nao">{d.data.descartado}</span>
+            </div>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</Base>
+
+<style>
+  .chamada {
+    font-size: 17px;
+    max-width: 68ch;
+    margin-bottom: 28px;
+  }
+  .lista {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+  }
+  .lista a {
+    display: grid;
+    gap: 6px;
+    justify-items: start;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid var(--linha-fina);
+    background: linear-gradient(180deg, #19293500, #15222c);
+    padding: 13px 17px 15px;
+  }
+  .lista a:hover {
+    border-color: var(--ouro);
+  }
+  .etiqueta {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 12.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    border: 1px solid;
+    padding: 0 7px 1px;
+  }
+  .lista h2 {
+    margin: 0;
+    font-size: 22px;
+  }
+  .lista p {
+    margin: 0;
+    color: var(--suave);
+    max-width: 74ch;
+  }
+  .lados {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 2px;
+    font-size: 13.5px;
+  }
+  .lados span {
+    border: 1px solid;
+    padding: 1px 9px 2px;
+  }
+  .sim {
+    color: #cfe8c7;
+    border-color: var(--pesquisado-borda);
+    background: var(--pesquisado-fundo);
+  }
+  .sim::before {
+    content: "adotado · ";
+    color: var(--suave);
+  }
+  .nao {
+    color: var(--suave);
+    border-color: var(--bloqueado-borda);
+    background: var(--bloqueado-fundo);
+    text-decoration: line-through;
+    text-decoration-color: #6d4a4a;
+  }
+  .nao::before {
+    content: "descartado · ";
+    text-decoration: none;
+    display: inline-block;
+  }
+</style>
